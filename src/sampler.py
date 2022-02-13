@@ -11,6 +11,9 @@ def make_flow(network, n, dim, L):
         _, logdetjac = jnp.linalg.slogdet(jac)
 
         return logdetjac - (n*dim*np.log(L) + jax.scipy.special.gammaln(n+1))
+        
+        #z = network.apply(params, None, s)
+        #return logdetjac -0.5 * jnp.sum(z**2 + jnp.log(2 * np.pi))
 
     return logprob
 

@@ -55,9 +55,9 @@ def psi(rij, kappa, G):
         g_k = erfc(jnp.pi * Gnorm / kappa) / Gnorm
         g_0 = -2 * jnp.sqrt(jnp.pi) / kappa
 
-    V_longrange = ( g_k * jnp.cos(2*jnp.pi * G.dot(rij.T)).sum(axis=-1) ).sum() \
-                    + g_0 * rij.shape[0]
-
+    V_longrange = ( g_k * jnp.cos(2*jnp.pi * jnp.sum(G*rij, axis=-1)) ).sum() \
+                    + g_0 
+     
     potential = V_shortrange + V_longrange
     return potential
 
@@ -75,6 +75,7 @@ def potential_energy(x, kappa, G, L, rs):
 
     n, dim = x.shape
 
+    x -= L * jnp.floor(x/L)
     i, j = jnp.triu_indices(n, k=1)
     rij = ( (x[:, None, :] - x)[i, j] )/L
     rij -= jnp.rint(rij)
@@ -83,3 +84,30 @@ def potential_energy(x, kappa, G, L, rs):
     Zij = (Z[:, None] * Z)[i,j]
     
     return 2*rs/L * jnp.sum( Zij * jax.vmap(psi, (0, None, None), 0)(rij, kappa, G) )
+
+if __name__=='__main__':
+    batchsize, n, dim = 10, 14, 3 
+    L, rs = 2.0 , 1.0
+    
+    key = jax.random.PRNGKey(42)
+    x = jax.random.uniform(key, (batchsize, n, dim), minval=0.0, maxval=L)
+    x = x - L*jnp.rint(x/L)
+
+    Gmax, kappa = 15, 7.0
+
+    G = kpoints(dim, Gmax)
+
+    V = potential_energy(x, kappa, G, L, rs) 
+    print (V)
+
+    import ewald3
+    NG = 12
+    def ewald(x):
+        n = x.shape[0]
+        Z = jnp.concatenate([jnp.ones(n//2), -jnp.ones(n//2)])
+        i,j = np.triu_indices(n, k=1)
+        Zij = (Z[:, None] * Z)[i,j]
+        rij = (jnp.reshape(x, (n, 1, dim)) - jnp.reshape(x, (1, n, dim)))[i,j]
+        return jnp.sum(Zij*jax.vmap(ewald3.psi,(0, None, None, None), 0)(rij, kappa, L, NG))
+ 
+    print (2*rs*jax.vmap(ewald)(x))
