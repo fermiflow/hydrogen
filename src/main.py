@@ -1,0 +1,337 @@
+import jax
+from jax.config import config
+config.update("jax_enable_x64", True)
+import jax.numpy as jnp
+from jax.flatten_util import ravel_pytree
+import os
+import time
+
+import checkpoint
+
+print("jax.__version__:", jax.__version__)
+key = jax.random.PRNGKey(42)
+num_devices = jax.device_count()
+print("Number of GPU devices:", num_devices)
+
+import argparse
+parser = argparse.ArgumentParser(description="Hydrogen")
+
+parser.add_argument("--folder", default="../data/", help="the folder to save data")
+parser.add_argument("--restore_path", default=None, help="checkpoint file path")
+
+# physical parameters.
+parser.add_argument("--n", type=int, default=14, help="total number of electrons == # of protons")
+parser.add_argument("--dim", type=int, default=3, help="spatial dimension")
+parser.add_argument("--rs", type=float, default=1.0, help="rs")
+parser.add_argument("--Theta", type=float, default=0.001, help="dimensionless temperature T/Ef")
+
+# normalizing flow.
+parser.add_argument("--steps", type=int, default=2, help="FermiNet: transformation steps")
+parser.add_argument("--depth", type=int, default=2, help="FermiNet: network depth")
+parser.add_argument("--spsize", type=int, default=16, help="FermiNet: single-particle feature size")
+parser.add_argument("--tpsize", type=int, default=16, help="FermiNet: two-particle feature size")
+parser.add_argument("--Nf", type=int, default=5, help="FermiNet: number of fequencies")
+
+# parameters relevant to th Ewald summation of Coulomb interaction.
+parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the Ewald summation of Coulomb potential")
+parser.add_argument("--kappa", type=int, default=10, help="screening parameter (in unit of 1/L) in Ewald summation")
+
+# MCMC.
+parser.add_argument("--mc_therm", type=int, default=10, help="MCMC thermalization steps")
+parser.add_argument("--mc_steps", type=int, default=50, help="MCMC update steps")
+parser.add_argument("--mc_stddev", type=float, default=0.1, help="standard deviation of the Gaussian proposal in MCMC update")
+
+# technical miscellaneous
+parser.add_argument("--hutchinson", action='store_true',  help="use Hutchinson's trick to compute the laplacian")
+
+# optimizer parameters.
+parser.add_argument("--lr", type=float, default=1e-2, help="initial learning rate")
+parser.add_argument("--sr", action='store_true',  help="use the second-order stochastic reconfiguration optimizer")
+parser.add_argument("--decay", type=float, default=1e-2, help="learning rate decay")
+parser.add_argument("--damping", type=float, default=1e-3, help="damping")
+parser.add_argument("--max_norm", type=float, default=1e-3, help="gradnorm maximum")
+parser.add_argument("--clip_factor", type=float, default=5.0, help="clip factor for gradient")
+
+# training parameters.
+parser.add_argument("--batch", type=int, default=2048, help="batch size (per single gradient accumulation step)")
+parser.add_argument("--acc_steps", type=int, default=4, help="gradient accumulation steps")
+parser.add_argument("--epoch", type=int, default=100000, help="final epoch")
+
+args = parser.parse_args()
+
+n, dim = args.n, args.dim
+assert (n%2==0)
+if dim == 3:
+    L = (4/3*jnp.pi*n)**(1/3)
+    beta = 1 / ((2.25*jnp.pi)**(2/3) * args.Theta)
+elif dim == 2:
+    L = jnp.sqrt(jnp.pi*n)
+    beta = 1/ (2 * args.Theta)
+print("n = %d, dim = %d, L = %f, rs = %f" % (n, dim, L, args.rs))
+
+####################################################################################
+
+print("\n========== Initialize single-particle orbitals ==========")
+
+from orbitals import sp_orbitals
+sp_indices, Es = sp_orbitals(dim)
+sp_indices, Es = jnp.array(sp_indices), jnp.array(Es)
+sp_indices = sp_indices[:n//2]
+print("beta = %f, Ef = %d"% (beta, Es[n//2-1]))
+####################################################################################
+
+print("\n========== Initialize normalizing flow ==========")
+
+import haiku as hk
+from ferminet import FermiNet
+def forward_fn(x):
+    for _ in range(args.steps):
+        model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, False)
+        x = model(x)
+    return x
+network_flow = hk.transform(forward_fn)
+x_dummy = jax.random.uniform(key, (n, dim), minval=0., maxval=L)
+params_flow = network_flow.init(key, x_dummy)
+
+raveled_params_flow, _ = ravel_pytree(params_flow)
+print("#parameters in the flow model: %d" % raveled_params_flow.size)
+
+from sampler import make_flow, make_classical_score
+logprob_novmap = make_flow(network_flow, n, dim, L)
+logprob = jax.vmap(logprob_novmap, (None, 0), 0)
+
+####################################################################################
+
+print("\n========== Initialize wavefunction ==========")
+
+def forward_fn(x):
+    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, True)
+    return model(x)
+network_wfn = hk.transform(forward_fn)
+x_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
+params_wfn = network_wfn.init(key, x_dummy)
+
+raveled_params_wfn, _ = ravel_pytree(params_wfn)
+print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
+
+from logpsi import make_logpsi, make_logpsi_grad_laplacian, \
+                   make_logpsi2, make_quantum_score
+logpsi_novmap = make_logpsi(network_wfn, sp_indices, L)
+logpsi2 = make_logpsi2(logpsi_novmap)
+
+####################################################################################
+
+print("\n========== Initialize relevant quantities for Ewald summation ==========")
+
+from potential import kpoints, Madelung
+G = kpoints(dim, args.Gmax)
+Vconst = 2*n * args.rs/L * Madelung(dim, args.kappa, G) # 2 because of proton + electron
+print("(scaled) Vconst:", Vconst/(n*args.rs/L))
+
+####################################################################################
+
+print("\n========== Initialize optimizer ==========")
+
+import optax
+if args.sr:
+    classical_score_fn = make_classical_score(logprob_novmap)
+    quantum_score_fn = make_quantum_score(logpsi_novmap)
+    from sr import hybrid_fisher_sr
+    fishers_fn, optimizer = hybrid_fisher_sr(classical_score_fn, quantum_score_fn,
+            args.lr, args.decay, args.damping, args.max_norm)
+    print("Optimizer hybrid_fisher_sr: lr = %g, decay = %g, damping = %g, max_norm = %g." %
+            (args.lr, args.decay, args.damping, args.max_norm))
+else:
+    optimizer = optax.adam(args.lr)
+    print("Optimizer adam: lr = %g." % args.lr)
+
+####################################################################################
+
+print("\n========== Checkpointing ==========")
+
+from utils import shard, replicate
+
+path = args.folder + "n_%d_dim_%d_rs_%g_Theta_%g" % (n, dim, args.rs, args.Theta) \
+                   + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d" % \
+                      (args.steps, args.depth, args.spsize, args.tpsize, args.Nf) \
+                   + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
+                   + "_mctherm_%d_mcsteps_%d_mcstddev_%g" % (args.mc_therm, args.mc_steps, args.mc_stddev) \
+                   + ("_ht" if args.hutchinson else "") \
+                   + ("_lr_%g_decay_%g_damping_%g_norm_%g" % (args.lr, args.decay, args.damping, args.max_norm) \
+                        if args.sr else "_lr_%g" % args.lr) \
+                   + "_clip_%g"%(args.clip_factor) \
+                   + "_bs_%d_devices_%d_accsteps_%d" % (args.batch, num_devices, args.acc_steps)
+
+if not os.path.isdir(path):
+    os.makedirs(path)
+    print("Create directory: %s" % path)
+
+ckpt_filename, epoch_finished = checkpoint.find_ckpt_filename(args.restore_path or path)
+
+from VMC import sample_s_and_x
+
+if ckpt_filename is not None:
+    print("Load checkpoint file: %s, epoch finished: %g" %(ckpt_filename, epoch_finished))
+    ckpt = checkpoint.load_data(ckpt_filename)
+    keys, x, params_flow, params_wfn, opt_state = \
+        ckpt["keys"], ckpt["s"], ckpt["x"], ckpt["params_flow"], ckpt["params_wfn"], ckpt["opt_state"]
+    s, x, keys = shard(s), shard(x), shard(keys)
+    params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
+else:
+    print("No checkpoint file found. Start from scratch.")
+
+    opt_state = optimizer.init((params_flow, params_wfn))
+
+    print("Initialize key and coordinate samples...")
+
+    if args.batch % num_devices != 0:
+        raise ValueError("Batch size must be divisible by the number of GPU devices. "
+                         "Got batch = %d for %d devices now." % (args.batch, num_devices))
+    batch_per_device = args.batch // num_devices
+
+    key, key_proton, key_electron = jax.random.split(key, 3)
+
+    s = jax.random.uniform(key_proton, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
+    x = jax.random.uniform(key_electron, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
+
+    keys = jax.random.split(key, num_devices)
+    x, keys = shard(x), shard(keys)
+    params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
+
+    for i in range(args.mc_therm):
+        print("---- thermal step %d ----" % (i+1))
+        keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
+                                   logprob, s, params_flow,
+                                   logpsi2, x, params_wfn,
+                                   args.mc_steps, args.mc_stddev, L)
+    print("keys shape:", keys.shape, "\t\ttype:", type(keys))
+    print("x shape:", x.shape, "\t\ttype:", type(x))
+
+####################################################################################
+
+print("\n========== Training ==========")
+
+logpsi, logpsi_grad_laplacian = \
+        make_logpsi_grad_laplacian(logpsi_novmap, hutchinson=args.hutchinson)
+
+from VMC import make_loss
+observable_and_lossfn = make_loss(logprob, logpsi, logpsi_grad_laplacian,
+                                  args.kappa, G, L, args.rs, Vconst, beta, args.clip_factor)
+
+from functools import partial
+
+@partial(jax.pmap, axis_name="p",
+        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0, None) if args.sr else (0, 0, None, 0, 0, 0, 0, None, None, None),
+        out_axes=(0, 0, None, 0, 0, 0, 0, 0) if args.sr else (0, 0, None, 0, 0, None, None, None),
+        static_broadcasted_argnums=10 if args.sr else (7, 8, 9, 10),
+        donate_argnums=(3, 4))
+def update(params_flow, params_wfn, opt_state, s, x, key, grads_acc,
+        classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc, final_step):
+
+    data, classical_lossfn, quantum_lossfn = observable_and_lossfn(
+            params_flow, params_wfn, s, x, key)
+
+    grad_params_flow = jax.grad(classical_lossfn)(params_flow)
+    grad_params_wfn = jax.grad(quantum_lossfn)(params_wfn)
+    grads = grad_params_flow, grad_params_wfn
+    grads = jax.lax.pmean(grads, axis_name="p")
+    grads_acc = jax.tree_multimap(lambda acc, i: acc + i, grads_acc, grads)
+
+    if args.sr:
+        classical_fisher, quantum_fisher, quantum_score_mean = fishers_fn(params_flow, params_wfn, s, x)
+        classical_fisher_acc += classical_fisher
+        quantum_fisher_acc += quantum_fisher
+        quantum_score_mean_acc += quantum_score_mean
+
+    if final_step:
+        grads_acc, classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc = \
+                jax.tree_map(lambda acc: acc / args.acc_steps,
+                             (grads_acc, classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc))
+        updates, opt_state = optimizer.update(grads_acc, opt_state,
+                                params=(classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc) if args.sr else None)
+        params_flow, params_wfn = optax.apply_updates((params_flow, params_wfn), updates)
+    
+    return params_flow, params_wfn, opt_state, data, grads_acc, \
+            classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc
+
+time_of_last_ckpt = time.time()
+log_filename = os.path.join(path, "data.txt")
+f = open(log_filename, "w" if epoch_finished == 0 else "a",
+            buffering=1, newline="\n")
+for i in range(epoch_finished + 1, args.epoch + 1):
+
+    grads_acc = jax.tree_map(jnp.zeros_like, (params_flow, params_wfn))
+    grads_acc = shard(grads_acc)
+    if args.sr:
+        dummy_input = jnp.zeros(num_devices)
+        classical_fisher_acc = jax.pmap(lambda _: jnp.zeros((raveled_params_flow.size, raveled_params_flow.size)))(dummy_input)
+        quantum_fisher_acc = jax.pmap(lambda _: jnp.zeros((raveled_params_wfn.size, raveled_params_wfn.size)))(dummy_input)
+        quantum_score_mean_acc = jax.pmap(lambda _: jnp.zeros(raveled_params_wfn.size))(dummy_input)
+    else:
+        classical_fisher_acc = quantum_fisher_acc = quantum_score_mean_acc = None
+    ar_s_acc = shard(jnp.zeros(num_devices))
+    ar_x_acc = shard(jnp.zeros(num_devices))
+
+    for acc in range(args.acc_steps):
+        keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
+                                               logprob, s, params_flow,
+                                               logpsi2, x, params_wfn,
+                                               args.mc_steps, args.mc_stddev, L)
+        ar_s_acc += ar_s
+        ar_x_acc += ar_x
+
+        final_step = (acc == args.acc_steps - 1)
+
+        params_flow, params_wfn, opt_state, data, grads_acc, \
+        classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc \
+            = update(params_flow, params_wfn, opt_state, s, x, keys, grads_acc,
+                     classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc, final_step)
+
+        data = jax.tree_map(lambda x: x[0], data)
+        if acc == 0:
+            data_acc = data
+        else:
+            data_acc = jax.tree_multimap(lambda acc, i: acc + i, data_acc, data)
+
+    ar_s = ar_s_acc[0] / args.acc_steps
+    ar_x = ar_x_acc[0] / args.acc_steps
+
+    data = jax.tree_map(lambda acc: acc / args.acc_steps, data_acc)
+    K, K2_mean, V, V2_mean, E, E2_mean, F, F2_mean, S, S2_mean = \
+            data["K_mean"], data["K2_mean"], data["V_mean"], data["V2_mean"], \
+            data["E_mean"], data["E2_mean"], data["F_mean"], data["F2_mean"], \
+            data["S_mean"], data["S2_mean"]
+    K_std = jnp.sqrt((K2_mean - K**2) / (args.batch*args.acc_steps))
+    V_std = jnp.sqrt((V2_mean - V**2) / (args.batch*args.acc_steps))
+    E_std = jnp.sqrt((E2_mean - E**2) / (args.batch*args.acc_steps))
+    F_std = jnp.sqrt((F2_mean - F**2) / (args.batch*args.acc_steps))
+    S_std = jnp.sqrt((S2_mean - S**2) / (args.batch*args.acc_steps))
+
+    # Note the quantities with energy dimension obtained above are in units of Ry/rs^2.
+    print("iter: %04d" % i,
+            "F:", F/args.rs**2, "F_std:", F_std/args.rs**2,
+            "E:", E/args.rs**2, "E_std:", E_std/args.rs**2,
+            "K:", K/args.rs**2, "K_std:", K_std/args.rs**2,
+            "V:", V/args.rs**2, "V_std:", V_std/args.rs**2,
+            "S:", S, "S_std:", S_std,
+            "accept_rate:", ar_s, ar_x)
+    f.write( ("%6d" + "  %.6f"*10 + "  %.4f"*2 + "\n") % (i,
+                                                F/args.rs**2, F_std/args.rs**2,
+                                                E/args.rs**2, E_std/args.rs**2,
+                                                K/args.rs**2, K_std/args.rs**2,
+                                                V/args.rs**2, V_std/args.rs**2,
+                                                S, S_std, 
+                                                ar_s, ar_x) )
+
+    if time.time() - time_of_last_ckpt > 3600:
+        ckpt = {"keys": keys, "s": s, "x": x,
+                "params_flow": jax.tree_map(lambda x: x[0], params_flow),
+                "params_wfn": jax.tree_map(lambda x: x[0], params_wfn),
+                "opt_state": opt_state
+               }
+        ckpt_filename = os.path.join(path, "epoch_%06d.pkl" %i)
+        checkpoint.save_data(ckpt, ckpt_filename)
+        print("Save checkpoint file: %s" % ckpt_filename)
+        time_of_last_ckpt = time.time()
+
+f.close()
