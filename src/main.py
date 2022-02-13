@@ -22,8 +22,8 @@ parser.add_argument("--restore_path", default=None, help="checkpoint file path")
 # physical parameters.
 parser.add_argument("--n", type=int, default=14, help="total number of electrons == # of protons")
 parser.add_argument("--dim", type=int, default=3, help="spatial dimension")
-parser.add_argument("--rs", type=float, default=1.0, help="rs")
-parser.add_argument("--Theta", type=float, default=0.001, help="dimensionless temperature T/Ef")
+parser.add_argument("--rs", type=float, default=1.4, help="rs")
+parser.add_argument("--T", type=float, default=1000.0, help="temperature in  Kelvin")
 
 # normalizing flow.
 parser.add_argument("--steps", type=int, default=2, help="FermiNet: transformation steps")
@@ -60,13 +60,15 @@ parser.add_argument("--epoch", type=int, default=100000, help="final epoch")
 args = parser.parse_args()
 
 n, dim = args.n, args.dim
+beta = 157888.088922572/args.T # inverse temperature in unit of 1/Ry
+print ("temperature in Rydberg unit:", 1.0/beta)
+
 assert (n%2==0)
 if dim == 3:
     L = (4/3*jnp.pi*n)**(1/3)
-    beta = 1 / ((2.25*jnp.pi)**(2/3) * args.Theta)
 elif dim == 2:
     L = jnp.sqrt(jnp.pi*n)
-    beta = 1/ (2 * args.Theta)
+
 print("n = %d, dim = %d, L = %f, rs = %f" % (n, dim, L, args.rs))
 
 ####################################################################################
@@ -125,7 +127,7 @@ print("\n========== Initialize relevant quantities for Ewald summation =========
 
 from potential import kpoints, Madelung
 G = kpoints(dim, args.Gmax)
-Vconst = 2*n * args.rs/L * Madelung(dim, args.kappa, G) # 2 because of proton + electron
+Vconst = n * args.rs/L * Madelung(dim, args.kappa, G) 
 print("(scaled) Vconst:", Vconst/(n*args.rs/L))
 
 ####################################################################################
@@ -151,7 +153,7 @@ print("\n========== Checkpointing ==========")
 
 from utils import shard, replicate
 
-path = args.folder + "n_%d_dim_%d_rs_%g_Theta_%g" % (n, dim, args.rs, args.Theta) \
+path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d" % \
                       (args.steps, args.depth, args.spsize, args.tpsize, args.Nf) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
@@ -297,29 +299,37 @@ for i in range(epoch_finished + 1, args.epoch + 1):
     ar_x = ar_x_acc[0] / args.acc_steps
 
     data = jax.tree_map(lambda acc: acc / args.acc_steps, data_acc)
-    K, K2_mean, V, V2_mean, E, E2_mean, F, F2_mean, S, S2_mean = \
-            data["K_mean"], data["K2_mean"], data["V_mean"], data["V2_mean"], \
-            data["E_mean"], data["E2_mean"], data["F_mean"], data["F2_mean"], \
-            data["S_mean"], data["S2_mean"]
-    K_std = jnp.sqrt((K2_mean - K**2) / (args.batch*args.acc_steps))
-    V_std = jnp.sqrt((V2_mean - V**2) / (args.batch*args.acc_steps))
-    E_std = jnp.sqrt((E2_mean - E**2) / (args.batch*args.acc_steps))
-    F_std = jnp.sqrt((F2_mean - F**2) / (args.batch*args.acc_steps))
-    S_std = jnp.sqrt((S2_mean - S**2) / (args.batch*args.acc_steps))
+    K, K2, Vpp, Vpp2, Vep, Vep2, Vee, Vee2, E, E2, F, F2, S, S2 = \
+            data["K"], data["K2"], \
+            data["Vpp"], data["Vpp2"],\
+            data["Vep"], data["Vep2"],\
+            data["Vee"], data["Vee2"],\
+            data["E"], data["E2"], \
+            data["F"], data["F2"], \
+            data["S"], data["S2"]
+
+    K_std = jnp.sqrt((K2- K**2) / (args.batch*args.acc_steps))
+    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (args.batch*args.acc_steps))
+    Vep_std = jnp.sqrt((Vep2- Vep**2) / (args.batch*args.acc_steps))
+    Vee_std = jnp.sqrt((Vee2- Vee**2) / (args.batch*args.acc_steps))
+    E_std = jnp.sqrt((E2- E**2) / (args.batch*args.acc_steps))
+    F_std = jnp.sqrt((F2- F**2) / (args.batch*args.acc_steps))
+    S_std = jnp.sqrt((S2- S**2) / (args.batch*args.acc_steps))
 
     # Note the quantities with energy dimension obtained above are in units of Ry/rs^2.
     print("iter: %04d" % i,
             "F:", F/args.rs**2, "F_std:", F_std/args.rs**2,
             "E:", E/args.rs**2, "E_std:", E_std/args.rs**2,
             "K:", K/args.rs**2, "K_std:", K_std/args.rs**2,
-            "V:", V/args.rs**2, "V_std:", V_std/args.rs**2,
             "S:", S, "S_std:", S_std,
             "accept_rate:", ar_s, ar_x)
-    f.write( ("%6d" + "  %.6f"*10 + "  %.4f"*2 + "\n") % (i,
+    f.write( ("%6d" + "  %.6f"*14 + "  %.4f"*2 + "\n") % (i,
                                                 F/args.rs**2, F_std/args.rs**2,
                                                 E/args.rs**2, E_std/args.rs**2,
                                                 K/args.rs**2, K_std/args.rs**2,
-                                                V/args.rs**2, V_std/args.rs**2,
+                                                Vpp/args.rs**2, Vpp_std/args.rs**2,
+                                                Vep/args.rs**2, Vep_std/args.rs**2,
+                                                Vee/args.rs**2, Vee_std/args.rs**2,
                                                 S, S_std, 
                                                 ar_s, ar_x) )
 

@@ -81,9 +81,21 @@ def potential_energy(x, kappa, G, L, rs):
     rij -= jnp.rint(rij)
     
     Z = jnp.concatenate([jnp.ones(n//2), -jnp.ones(n//2)])
-    Zij = (Z[:, None] * Z)[i,j]
-    
-    return 2*rs/L * jnp.sum( Zij * jax.vmap(psi, (0, None, None), 0)(rij, kappa, G) )
+
+    #Zij = (Z[:, None] * Z)[i,j]
+    # return 2*rs/L * jnp.sum( Zij * jax.vmap(psi, (0, None, None), 0)(rij, kappa, G) )
+
+    total_charge = (Z[:, None]+Z )[i, j]
+
+    v = jax.vmap(psi, (0, None, None), 0)(rij, kappa, G)
+
+    v_pp = jnp.sum(jnp.where(total_charge==2, v, jnp.zeros_like(v)))
+
+    v_ep = -jnp.sum(jnp.where(total_charge==0, v, jnp.zeros_like(v)))
+
+    v_ee = jnp.sum(jnp.where(total_charge==-2, v, jnp.zeros_like(v)))
+
+    return 2*rs/L*v_pp , 2*rs/L * v_ep , 2*rs/L*v_ee
 
 if __name__=='__main__':
     batchsize, n, dim = 10, 14, 3 

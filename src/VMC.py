@@ -44,40 +44,47 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
         print("laplacian.shape:", laplacian.shape)
 
         kinetic = -laplacian - (grad**2).sum(axis=(-2, -1))
-        potential = potential_energy(jnp.concatenate([s, x], axis=1), kappa, G, L, rs) + Vconst
-        Eloc = kinetic + potential
-        Floc = logp_states / beta + Eloc.real
+        v_pp, v_ep, v_ee = potential_energy(jnp.concatenate([s, x], axis=1), kappa, G, L, rs) 
+        v_pp += Vconst
+        v_ee += Vconst
 
-        K_mean, K2_mean, V_mean, V2_mean, \
-        E_mean, E2_mean, F_mean, F2_mean, S_mean, S2_mean = \
+        Eloc = kinetic + v_ep + v_ee
+        Floc = logp_states *rs**2/ beta + Eloc.real + v_pp
+
+        K, K2, Vpp, Vpp2, Vep, Vep2, Vee, Vee2, \
+        E, E2, F, F2, S, S2 = \
         jax.tree_map(lambda x: jax.lax.pmean(x, axis_name="p"), 
                      (kinetic.real.mean(), (kinetic.real**2).mean(),
-                      potential.mean(), (potential**2).mean(),
+                      v_pp.mean(), (v_pp**2).mean(), 
+                      v_ep.mean(), (v_ep**2).mean(), 
+                      v_ee.mean(), (v_ee**2).mean(), 
                       Eloc.real.mean(), (Eloc.real**2).mean(),
                       Floc.mean(), (Floc**2).mean(),
                       -logp_states.mean(), (logp_states**2).mean()
                      )
                     )
-        observable = {"K_mean": K_mean, "K2_mean": K2_mean,
-                      "V_mean": V_mean, "V2_mean": V2_mean,
-                      "E_mean": E_mean, "E2_mean": E2_mean,
-                      "F_mean": F_mean, "F2_mean": F2_mean,
-                      "S_mean": S_mean, "S2_mean": S2_mean}
+        observable = {"K": K, "K2": K2,
+                      "Vpp": Vpp, "Vpp2": Vpp2,
+                      "Vep": Vep, "Vep2": Vep2,
+                      "Vee": Vee, "Vee2": Vee2,
+                      "E": E, "E2": E2,
+                      "F": F, "F2": F2,
+                      "S": S, "S2": S2}
 
         def classical_lossfn(params_flow):
             logp_states = logprob(params_flow, s)
 
-            tv = jax.lax.pmean(jnp.abs(Floc - F_mean).mean(), axis_name="p")
-            Floc_clipped = jnp.clip(Floc, F_mean - clip_factor*tv, F_mean + clip_factor*tv)
-            gradF_phi = (logp_states * (Floc_clipped - F_mean)).mean()
+            tv = jax.lax.pmean(jnp.abs(Floc - F).mean(), axis_name="p")
+            Floc_clipped = jnp.clip(Floc, F - clip_factor*tv, F + clip_factor*tv)
+            gradF_phi = (logp_states * (Floc_clipped - F)).mean()
             return gradF_phi
 
         def quantum_lossfn(params_wfn):
             logpsix = logpsi(x, params_wfn, s)
 
-            tv = jax.lax.pmean(jnp.abs(Eloc - E_mean).mean(), axis_name="p")
-            Eloc_clipped = jnp.clip(Eloc, E_mean - clip_factor*tv, E_mean + clip_factor*tv)
-            gradF_theta = 2 * (logpsix * (Eloc_clipped - E_mean).conj()).real.mean()
+            tv = jax.lax.pmean(jnp.abs(Eloc - E).mean(), axis_name="p")
+            Eloc_clipped = jnp.clip(Eloc, E - clip_factor*tv, E + clip_factor*tv)
+            gradF_theta = 2 * (logpsix * (Eloc_clipped - E).conj()).real.mean()
             return gradF_theta
 
         return observable, classical_lossfn, quantum_lossfn
