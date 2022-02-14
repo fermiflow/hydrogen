@@ -2,22 +2,22 @@ import subprocess
 import time 
 import re
 
-nickname = 'firsttry'
+nickname = 'benchmark'
 
 ###############################
-nlist = [38]
-rslist = [1.5]
-Tlist = [1000]
+nlist = [54]
+rslist = [1.4]
+Tlist = [1500]
 
 dim = 3
 
 Gmax = 15
-steps, depth = 2, 2
-h1size, h2size = 32, 16
-acc_steps = 1
+steps, depth = 1, 3
+h1size, h2size = 16, 16
+acc_steps = 4
 Nf = 5 
 
-lr = 0.001
+lr = 0.01
 decay = 1e-2
 damping = 1e-3
 max_norm = 1e-3
@@ -25,7 +25,7 @@ clip_factor = 5.0
 
 mc_steps = 50
 mc_stddev = 0.05
-batchsize = 1024
+batchsize = 256
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -37,7 +37,7 @@ def submitJob(bin,args,jobname,run=False,wait=None):
 #SBATCH --partition=v100
 #SBATCH --gres=gpu:4
 #SBATCH --nodes=1
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
 #SBATCH --error=%s'''%(jobname,jobname+'.log',jobname+'.log')

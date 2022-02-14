@@ -327,14 +327,14 @@ for i in range(epoch_finished + 1, args.epoch + 1):
             "S:", S, "S_std:", S_std,
             "accept_rate:", ar_s, ar_x)
     f.write( ("%6d" + "  %.6f"*16 + "  %.4f"*2 + "\n") % (i,
-                                                F/args.rs**2, F_std/args.rs**2,
-                                                E/args.rs**2, E_std/args.rs**2,
-                                                K/args.rs**2, K_std/args.rs**2,
-                                                Vpp/args.rs**2, Vpp_std/args.rs**2,
-                                                Vep/args.rs**2, Vep_std/args.rs**2,
-                                                Vee/args.rs**2, Vee_std/args.rs**2, # Ry
+                                                F/n/args.rs**2, F_std/n/args.rs**2,
+                                                E/n/args.rs**2, E_std/n/args.rs**2,
+                                                K/n/args.rs**2, K_std/n/args.rs**2,
+                                                Vpp/n/args.rs**2, Vpp_std/n/args.rs**2,
+                                                Vep/n/args.rs**2, Vep_std/n/args.rs**2,
+                                                Vee/n/args.rs**2, Vee_std/n/args.rs**2, # Ry
                                                 P/args.rs**2, P_std/args.rs**2, # GPa 
-                                                S, S_std, 
+                                                S/n, S_std/n, 
                                                 ar_s, ar_x) )
 
     if time.time() - time_of_last_ckpt > 3600:
