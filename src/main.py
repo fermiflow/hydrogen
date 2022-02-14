@@ -60,6 +60,7 @@ parser.add_argument("--epoch", type=int, default=100000, help="final epoch")
 args = parser.parse_args()
 
 n, dim = args.n, args.dim
+# Ry = 157888.088922572 Kelvin
 beta = 157888.088922572/args.T # inverse temperature in unit of 1/Ry
 print ("temperature in Rydberg unit:", 1.0/beta)
 
@@ -128,7 +129,7 @@ print("\n========== Initialize relevant quantities for Ewald summation =========
 from potential import kpoints, Madelung
 G = kpoints(dim, args.Gmax)
 Vconst = n * args.rs/L * Madelung(dim, args.kappa, G) 
-print("(scaled) Vconst:", Vconst/(n*args.rs/L))
+print("(scaled) Vconst:", Vconst/(n*args.rs/L)) # should be -1.41865 for 3d 
 
 ####################################################################################
 
@@ -299,11 +300,12 @@ for i in range(epoch_finished + 1, args.epoch + 1):
     ar_x = ar_x_acc[0] / args.acc_steps
 
     data = jax.tree_map(lambda acc: acc / args.acc_steps, data_acc)
-    K, K2, Vpp, Vpp2, Vep, Vep2, Vee, Vee2, E, E2, F, F2, S, S2 = \
+    K, K2, Vpp, Vpp2, Vep, Vep2, Vee, Vee2, P, P2, E, E2, F, F2, S, S2 = \
             data["K"], data["K2"], \
             data["Vpp"], data["Vpp2"],\
             data["Vep"], data["Vep2"],\
             data["Vee"], data["Vee2"],\
+            data["P"], data["P2"], \
             data["E"], data["E2"], \
             data["F"], data["F2"], \
             data["S"], data["S2"]
@@ -312,24 +314,26 @@ for i in range(epoch_finished + 1, args.epoch + 1):
     Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (args.batch*args.acc_steps))
     Vep_std = jnp.sqrt((Vep2- Vep**2) / (args.batch*args.acc_steps))
     Vee_std = jnp.sqrt((Vee2- Vee**2) / (args.batch*args.acc_steps))
+    P_std = jnp.sqrt((P2- P**2) / (args.batch*args.acc_steps))
     E_std = jnp.sqrt((E2- E**2) / (args.batch*args.acc_steps))
     F_std = jnp.sqrt((F2- F**2) / (args.batch*args.acc_steps))
     S_std = jnp.sqrt((S2- S**2) / (args.batch*args.acc_steps))
 
-    # Note the quantities with energy dimension obtained above are in units of Ry/rs^2.
+    # Note the quantities with energy dimension has a prefactor 1/rs^2
     print("iter: %04d" % i,
             "F:", F/args.rs**2, "F_std:", F_std/args.rs**2,
             "E:", E/args.rs**2, "E_std:", E_std/args.rs**2,
             "K:", K/args.rs**2, "K_std:", K_std/args.rs**2,
             "S:", S, "S_std:", S_std,
             "accept_rate:", ar_s, ar_x)
-    f.write( ("%6d" + "  %.6f"*14 + "  %.4f"*2 + "\n") % (i,
+    f.write( ("%6d" + "  %.6f"*16 + "  %.4f"*2 + "\n") % (i,
                                                 F/args.rs**2, F_std/args.rs**2,
                                                 E/args.rs**2, E_std/args.rs**2,
                                                 K/args.rs**2, K_std/args.rs**2,
                                                 Vpp/args.rs**2, Vpp_std/args.rs**2,
                                                 Vep/args.rs**2, Vep_std/args.rs**2,
-                                                Vee/args.rs**2, Vee_std/args.rs**2,
+                                                Vee/args.rs**2, Vee_std/args.rs**2, # Ry
+                                                P/args.rs**2, P_std/args.rs**2, # GPa 
                                                 S, S_std, 
                                                 ar_s, ar_x) )
 

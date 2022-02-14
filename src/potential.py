@@ -123,3 +123,6 @@ if __name__=='__main__':
         return jnp.sum(Zij*jax.vmap(ewald3.psi,(0, None, None, None), 0)(rij, kappa, L, NG))
  
     print (2*rs*jax.vmap(ewald)(x))
+
+
+    print (Madelung(dim, kappa, G))

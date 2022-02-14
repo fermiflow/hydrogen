@@ -50,14 +50,20 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
 
         Eloc = kinetic + v_ep + v_ee
         Floc = logp_states *rs**2/ beta + Eloc.real + v_pp
+        
+        #pressure in Gpa 
+        # 1 Ry/Bohr^3 = 14710.513242194795 GPa 
+        #http://greif.geo.berkeley.edu/~driver/conversions.html
+        P = (2*kinetic.real + (v_pp + v_ep + v_ee))/(3*(L*rs)**3)* 14710.513242194795
 
         K, K2, Vpp, Vpp2, Vep, Vep2, Vee, Vee2, \
-        E, E2, F, F2, S, S2 = \
+        P, P2, E, E2, F, F2, S, S2 = \
         jax.tree_map(lambda x: jax.lax.pmean(x, axis_name="p"), 
                      (kinetic.real.mean(), (kinetic.real**2).mean(),
                       v_pp.mean(), (v_pp**2).mean(), 
                       v_ep.mean(), (v_ep**2).mean(), 
                       v_ee.mean(), (v_ee**2).mean(), 
+                      P.mean(), (P**2).mean(), 
                       Eloc.real.mean(), (Eloc.real**2).mean(),
                       Floc.mean(), (Floc**2).mean(),
                       -logp_states.mean(), (logp_states**2).mean()
@@ -67,6 +73,7 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
                       "Vpp": Vpp, "Vpp2": Vpp2,
                       "Vep": Vep, "Vep2": Vep2,
                       "Vee": Vee, "Vee2": Vee2,
+                      "P": P, "P2": P2,
                       "E": E, "E2": E2,
                       "F": F, "F2": F2,
                       "S": S, "S2": S2}
