@@ -261,6 +261,8 @@ time_of_last_ckpt = time.time()
 log_filename = os.path.join(path, "data.txt")
 f = open(log_filename, "w" if epoch_finished == 0 else "a",
             buffering=1, newline="\n")
+if epoch_finished == 0:
+    f.write("epoch f f_err e e_err k k_err vpp vpp_err vep vep_err vee vee_err p p_err s s_err acc_s acc_x\n")
 for i in range(epoch_finished + 1, args.epoch + 1):
 
     grads_acc = jax.tree_map(jnp.zeros_like, (params_flow, params_wfn))

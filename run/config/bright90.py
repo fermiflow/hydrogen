@@ -2,7 +2,7 @@ import subprocess
 import time 
 import re
 
-nickname = 'benchmark'
+nickname = 'vpp'
 
 ###############################
 nlist = [54]
@@ -12,9 +12,8 @@ Tlist = [1500]
 dim = 3
 
 Gmax = 15
-steps, depth = 1, 3
-h1size, h2size = 16, 16
-acc_steps = 4
+steps, depth = 1, 2
+h1size, h2size = 32, 16
 Nf = 5 
 
 lr = 0.01
@@ -25,7 +24,8 @@ clip_factor = 5.0
 
 mc_steps = 50
 mc_stddev = 0.05
-batchsize = 256
+
+batchsize, acc_steps = 256, 4
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -35,7 +35,7 @@ def submitJob(bin,args,jobname,run=False,wait=None):
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=v100
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:8
 #SBATCH --nodes=1
 #SBATCH --time=48:00:00
 #SBATCH --job-name=%s
