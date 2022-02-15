@@ -48,13 +48,14 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
         v_pp += Vconst
         v_ee += Vconst
         
-        Eloc = kinetic + (v_pp + v_ep + v_ee)
-        Floc = logp_states *rs**2/ beta + Eloc.real 
+        Eloc = kinetic + (v_ep + v_ee)
+        Etot = Eloc.real + v_pp
+        Floc = logp_states *rs**2/ beta + Etot
         
         #pressure in Gpa using viral theorem 
         # 1 Ry/Bohr^3 = 14710.513242194795 GPa 
         #http://greif.geo.berkeley.edu/~driver/conversions.html
-        P = (kinetic.real + Eloc.real)/(3*(L*rs)**3)* 14710.513242194795
+        P = (kinetic.real + Etot)/(3*(L*rs)**3)* 14710.513242194795
 
         K, K2, Vpp, Vpp2, Vep, Vep2, Vee, Vee2, \
         P, P2, E, E2, F, F2, S, S2 = \
@@ -64,7 +65,7 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
                       v_ep.mean(), (v_ep**2).mean(), 
                       v_ee.mean(), (v_ee**2).mean(), 
                       P.mean(), (P**2).mean(), 
-                      Eloc.real.mean(), (Eloc.real**2).mean(),
+                      Etot.mean(), (Etot**2).mean(),
                       Floc.mean(), (Floc**2).mean(),
                       -logp_states.mean(), (logp_states**2).mean()
                      )
