@@ -2,12 +2,12 @@ import subprocess
 import time 
 import re
 
-nickname = 'vpp'
+nickname = 'ones'
 
 ###############################
 nlist = [54]
-rslist = [1.4]
-Tlist = [1500]
+rslist = [1.0]
+Tlist = [1000]
 
 dim = 3
 
