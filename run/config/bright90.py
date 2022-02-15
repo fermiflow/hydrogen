@@ -2,12 +2,12 @@ import subprocess
 import time 
 import re
 
-nickname = 'ones'
+nickname = 'ones-eloc'
 
 ###############################
-nlist = [54]
-rslist = [1.0]
-Tlist = [1000]
+nlist = [14]
+rslist = [1.4]
+Tlist = [1500]
 
 dim = 3
 
@@ -25,7 +25,7 @@ clip_factor = 5.0
 mc_steps = 50
 mc_stddev = 0.05
 
-batchsize, acc_steps = 256, 4
+batchsize, acc_steps = 1024, 1 
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -35,7 +35,7 @@ def submitJob(bin,args,jobname,run=False,wait=None):
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=v100
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --time=48:00:00
 #SBATCH --job-name=%s
