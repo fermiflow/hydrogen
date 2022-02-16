@@ -1,19 +1,20 @@
 import jax
 import jax.numpy as jnp
 
-def logslaterdet(indices, x, L, phi):
+def logslaterdet(s, x, L, rs, phi):
     """
-        Compute the logarithm of the slater determinant of several plane-wave
-    orbitals ln det(phi_j(r_i)), where phi_j(r_i) = 1/sqrt(L^dim) e^(i 2pi/L n_j r_i).
+        Compute the logarithm of the slater determinant 
 
     INPUT SHAPES:
-        indices: (n, dim) (array of integers)
-        x: (n, dim)
+        s: (n, dim) proton position
+        x: (n, dim) electron position
     """
+    
+    n, dim = s.shape
 
-    k = 2*jnp.pi/L * indices
-    k_dot_x = (k * x[:, None, :]).sum(axis=-1)
-    _, dim = x.shape
-    D = 1 / L**(dim/2) * jnp.exp(1j * k_dot_x)
+    rij = jnp.reshape(s, (n, 1, dim)) - jnp.reshape(x, (1, n, dim)) # rij[:, P] == riPj
+
+    r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rij/L), axis=-1)/(L/(2*jnp.pi))
+    D = jnp.exp(-r*rs) # e^(-r/a0) = e^(-r*rs) 
     phase, logabsdet = jnp.linalg.slogdet(D*phi)
     return logabsdet + jnp.log(phase)

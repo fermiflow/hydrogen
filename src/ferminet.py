@@ -88,12 +88,10 @@ class FermiNet(hk.Module):
 
         if self.is_wfn:
 
-            w = hk.get_parameter("w", [n//4, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            b = hk.get_parameter("b", [n//4], init=jnp.zeros)
+            w = hk.get_parameter("w", [n//2, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            b = hk.get_parameter("b", [n//2], init=jnp.zeros)
+            phi = w@h1[n//2:].T + b + jnp.ones((n//2,n//2))
 
-            phi_up = w@h1[n//2:n//2+n//4].T + b + jnp.ones((n//4,n//4))
-            phi_dn = w@h1[n//2+n//4:].T  + b + jnp.ones((n//4,n//4))
-
-            return final(h1[n//2:]) + x[n//2:], (phi_up, phi_dn)
+            return final(h1[n//2:]) + x[n//2:], phi
         else:
             return final(h1) + x

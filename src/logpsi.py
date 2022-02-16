@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from slater import logslaterdet
 from functools import partial
 
-def make_logpsi(flow, indices, L):
+def make_logpsi(flow, indices, L, rs):
 
     def logpsi(x, params, s):
 
@@ -21,9 +21,8 @@ def make_logpsi(flow, indices, L):
         """
         
         n, dim = x.shape
-        z, (phi_up, phi_dn) = flow.apply(params, None, jnp.concatenate([s, x]))
-        log_phi = logslaterdet(indices, z[:n//2], L, phi_up) +\
-                  logslaterdet(indices, z[n//2:], L, phi_dn)
+        z, phi = flow.apply(params, None, jnp.concatenate([s, x]))
+        log_phi = logslaterdet(s, z, L, rs, phi)
     
         return jnp.stack([log_phi.real,
                           log_phi.imag])
