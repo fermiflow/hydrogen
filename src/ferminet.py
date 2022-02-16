@@ -87,11 +87,23 @@ class FermiNet(hk.Module):
         final = hk.Linear(dim, w_init=hk.initializers.TruncatedNormal(self.init_stddev))
 
         if self.is_wfn:
-
+            
+            #orbital
             w = hk.get_parameter("w", [n//2, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
             b = hk.get_parameter("b", [n//2], init=jnp.zeros)
             phi = w@h1[n//2:].T + b + jnp.ones((n//2,n//2))
 
-            return final(h1[n//2:]) + x[n//2:], phi
+            #envlope
+            z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
+            rpe = jnp.reshape(x[:n//2], (n//2, 1, dim)) - jnp.reshape(z, (1, n//2, dim)) 
+            rpe = rpe - self.L*jnp.rint(rpe/self.L)
+            r = jnp.linalg.norm(rpe, axis=-1)
+
+            alpha = hk.get_parameter("alpha", [1], init=hk.initializers.Constant(1.4))
+            D = jnp.exp(-r*alpha) # e^(-r/a0) = e^(-r*rs) so a good initilization is alpha = rs
+
+            _, logabsdet = jnp.linalg.slogdet(D*phi)
+
+            return logabsdet
         else:
             return final(h1) + x

@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 
-from slater import logslaterdet
 from functools import partial
 
 def make_logpsi(flow, L, rs):
@@ -21,8 +20,7 @@ def make_logpsi(flow, L, rs):
         """
         
         n, dim = x.shape
-        z, phi = flow.apply(params, None, jnp.concatenate([s, x]))
-        log_phi = logslaterdet(s, z, L, rs, phi)
+        log_phi = flow.apply(params, None, jnp.concatenate([s, x]))
     
         return jnp.stack([log_phi.real,
                           log_phi.imag])
