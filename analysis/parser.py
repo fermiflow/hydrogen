@@ -18,6 +18,7 @@ def parse_filename(f):
     h1 = _parse(int, '_spsize_([0-9]*)', f)
     h2 = _parse(int, '_tpsize_([0-9]*)', f)
 
+    clip = _parse(float, '_clip_([0-9]*\.?[0-9]*)', f)
     lr = _parse(float, '_lr_([0-9]*\.?[0-9]*)', f)
     decay = _parse(float, '_decay_([0-9]*\.?[0-9]*)', f)
     eta = _parse(float, '_damping_([0-9]*\.?[0-9]*)', f)
@@ -28,7 +29,7 @@ def parse_filename(f):
 
     acc = _parse(int, '_accsteps_([0-9]*)', f)
 
-    return n, dim, rs, T, s, d, h1, h2, b, acc, lr, decay, eta, maxnorm, Nf
+    return n, dim, rs, T, s, d, h1, h2, b, acc, lr, decay, eta, maxnorm, Nf, clip
 
 
 def natural_sort(l):
