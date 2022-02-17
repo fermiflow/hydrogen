@@ -31,6 +31,7 @@ parser.add_argument("--depth", type=int, default=2, help="FermiNet: network dept
 parser.add_argument("--spsize", type=int, default=16, help="FermiNet: single-particle feature size")
 parser.add_argument("--tpsize", type=int, default=16, help="FermiNet: two-particle feature size")
 parser.add_argument("--Nf", type=int, default=5, help="FermiNet: number of fequencies")
+parser.add_argument("--K", type=int, default=4, help="FermiNet: number of dets")
 
 # parameters relevant to th Ewald summation of Coulomb interaction.
 parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the Ewald summation of Coulomb potential")
@@ -89,7 +90,7 @@ import haiku as hk
 from ferminet import FermiNet
 def forward_fn(x):
     for _ in range(args.steps):
-        model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, False)
+        model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, 0)
         x = model(x)
     return x
 network_flow = hk.transform(forward_fn)
@@ -108,7 +109,7 @@ logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 print("\n========== Initialize wavefunction ==========")
 
 def forward_fn(x):
-    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, True)
+    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, args.K)
     return model(x)
 network_wfn = hk.transform(forward_fn)
 x_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
@@ -155,8 +156,8 @@ print("\n========== Checkpointing ==========")
 from utils import shard, replicate
 
 path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
-                   + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d" % \
-                      (args.steps, args.depth, args.spsize, args.tpsize, args.Nf) \
+                   + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d_K_%d" % \
+                      (args.steps, args.depth, args.spsize, args.tpsize, args.Nf, args.K) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_mcstddev_%g" % (args.mc_therm, args.mc_steps, args.mc_stddev) \
                    + ("_ht" if args.hutchinson else "") \

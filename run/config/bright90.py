@@ -2,7 +2,7 @@ import subprocess
 import time 
 import re
 
-nickname = 'atom'
+nickname = 'atom-equivariant'
 
 ###############################
 nlist = [14]
@@ -15,6 +15,7 @@ Gmax = 15
 steps, depth = 1, 3
 h1size, h2size = 32, 16
 Nf = 5 
+K = 4
 
 lr = 0.1
 decay = 1e-2

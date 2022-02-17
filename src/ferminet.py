@@ -4,6 +4,8 @@ import numpy as np
 import haiku as hk
 from typing import Optional
 
+from utils import logdet_matmul
+
 class FermiNet(hk.Module):
 
     def __init__(self, 
@@ -12,7 +14,7 @@ class FermiNet(hk.Module):
                  h2_size:int, 
                  Nf:int,
                  L:float,
-                 is_wfn:bool,
+                 K: int = 0,
                  init_stddev:float = 0.01,
                  name: Optional[str] = None
                  ):
@@ -20,9 +22,8 @@ class FermiNet(hk.Module):
         self.depth = depth
         self.Nf = Nf
         self.L = L
-        self.is_wfn = is_wfn
+        self.K = K
         self.init_stddev = init_stddev
-
 
         self.fc1 = [hk.Linear(h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
         self.fc2 = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth-1)]
@@ -51,7 +52,7 @@ class FermiNet(hk.Module):
     def _combine(self, h1, h2):
         n = h1.shape[0]
 
-        partitions = [n//2, n//2+n//4] if self.is_wfn else [n]
+        partitions = [n//2, n//2+n//4] if self.K >0 else [n]
 
         h1s = jnp.split(h1, partitions, axis=0)
         h2s = jnp.split(h2, partitions, axis=0)
@@ -86,12 +87,16 @@ class FermiNet(hk.Module):
 
         final = hk.Linear(dim, w_init=hk.initializers.TruncatedNormal(self.init_stddev))
 
-        if self.is_wfn:
+        if self.K > 0:
             
+
             #orbital
-            w = hk.get_parameter("w", [n//2, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            b = hk.get_parameter("b", [n//2], init=jnp.zeros)
-            phi = w@h1[n//2:].T + b + jnp.ones((n//2,n//2))
+            w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            b = hk.get_parameter("b", [self.K, h1.shape[-1]], init=jnp.zeros)
+        
+            phi = jnp.einsum("ia,kab,jb->kij", h1[:n//2], w, h1[n//2:]) + \
+                  jnp.einsum("ia,ka->ki", h1[:n//2], b)[:, :, None]  + \
+                  jnp.ones((n//2,n//2))[None, :, :]
 
             #envlope
             z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
@@ -99,10 +104,11 @@ class FermiNet(hk.Module):
             rpe = rpe - self.L*jnp.rint(rpe/self.L)
             r = jnp.linalg.norm(rpe, axis=-1)
 
-            alpha = hk.get_parameter("alpha", [1], init=hk.initializers.Constant(1.4))
-            D = jnp.exp(-r*alpha) # e^(-r/a0) = e^(-r*rs) so a good initilization is alpha = rs
-
-            _, logabsdet = jnp.linalg.slogdet(D*phi)
+            alpha = hk.get_parameter("alpha", [self.K], init=hk.initializers.TruncatedNormal(mean=1.4,stddev=self.init_stddev))
+            alpha_r = jnp.einsum("k,ij->kij", alpha, r)
+            D = jnp.exp(-alpha_r) # e^(-r/a0) = e^(-r*rs) so a good initilization is alpha = rs
+                
+            _, logabsdet = logdet_matmul([D*phi])
 
             return logabsdet
         else:

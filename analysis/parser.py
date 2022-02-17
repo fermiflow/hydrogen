@@ -18,17 +18,19 @@ def parse_filename(f):
     h1 = _parse(int, '_spsize_([0-9]*)', f)
     h2 = _parse(int, '_tpsize_([0-9]*)', f)
 
+    clip = _parse(float, '_clip_([0-9]*\.?[0-9]*)', f)
     lr = _parse(float, '_lr_([0-9]*\.?[0-9]*)', f)
     decay = _parse(float, '_decay_([0-9]*\.?[0-9]*)', f)
     eta = _parse(float, '_damping_([0-9]*\.?[0-9]*)', f)
     maxnorm = _parse(float, 'norm_([0-9]*\.?[0-9]*)', f)
     b = _parse(int, '_bs_([0-9]*)', f)
 
+    K = _parse(int, '_K_([0-9]*)', f)
     Nf = _parse(int, '_Nf_([0-9]*)', f)
 
     acc = _parse(int, '_accsteps_([0-9]*)', f)
 
-    return n, dim, rs, T, s, d, h1, h2, b, acc, lr, decay, eta, maxnorm, Nf
+    return n, dim, rs, T, s, d, h1, h2, b, acc, lr, decay, eta, maxnorm, Nf, clip, K
 
 
 def natural_sort(l):

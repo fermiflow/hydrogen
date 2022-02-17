@@ -45,6 +45,7 @@ if __name__=='__main__':
                         'spsize': h1size,
                         'tpsize': h2size,
                         'Nf': Nf, 
+                        'K': K,
                         'folder':resfolder,
                         'batch':batchsize,
                         'mc_steps':mc_steps,
