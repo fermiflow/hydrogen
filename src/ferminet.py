@@ -16,6 +16,7 @@ class FermiNet(hk.Module):
                  L:float,
                  K: int = 0,
                  init_stddev:float = 0.01,
+                 rs: Optional[float] = 1.4,
                  name: Optional[str] = None
                  ):
         super().__init__(name=name)
@@ -24,6 +25,7 @@ class FermiNet(hk.Module):
         self.L = L
         self.K = K
         self.init_stddev = init_stddev
+        self.rs = rs
 
         self.fc1 = [hk.Linear(h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
         self.fc2 = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth-1)]
@@ -104,8 +106,8 @@ class FermiNet(hk.Module):
             rpe = rpe - self.L*jnp.rint(rpe/self.L)
             r = jnp.linalg.norm(rpe, axis=-1)
 
-            alpha = hk.get_parameter("alpha", [self.K], init=hk.initializers.TruncatedNormal(mean=1.4,stddev=self.init_stddev))
-            alpha_r = jnp.einsum("k,ij->kij", alpha, r)
+            alpha = hk.get_parameter("alpha", [self.K], init=hk.initializers.TruncatedNormal(mean=jnp.log(jnp.exp(self.rs) -1.0),stddev=self.init_stddev))
+            alpha_r = jnp.einsum("k,ij->kij", jax.nn.softplus(alpha), r) # ensures it is positive so electron binds to proton
             D = jnp.exp(-alpha_r) # e^(-r/a0) = e^(-r*rs) so a good initilization is alpha = rs
                 
             _, logabsdet = logdet_matmul([D*phi])

@@ -109,7 +109,7 @@ logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 print("\n========== Initialize wavefunction ==========")
 
 def forward_fn(x):
-    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, args.K)
+    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, args.K, rs=args.rs)
     return model(x)
 network_wfn = hk.transform(forward_fn)
 x_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
