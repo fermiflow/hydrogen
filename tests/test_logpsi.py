@@ -1,13 +1,18 @@
 from config import * 
 
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, make_logpsi2
+from orbitals import sp_orbitals
 
 key = jax.random.PRNGKey(42)
 
-def fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K):
+def fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, rs):
     from ferminet import FermiNet
+
+    sp_indices, _ = sp_orbitals(dim)
+    sp_indices = jnp.array(sp_indices)[:n//2]
+
     def flow_fn(x):
-        model = FermiNet(depth, spsize, tpsize, Nf, L, K)
+        model = FermiNet(depth, spsize, tpsize, Nf, L, K, rs=rs, indices=sp_indices)
         return model(x)
     flow = hk.transform(flow_fn)
 
@@ -24,7 +29,7 @@ def test_logpsi():
     depth, spsize, tpsize, Nf, L, K = 3, 16, 16, 5, 1.234, 8
     rs = 1.0
     n, dim = 14, 3
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, rs)
 
     logpsi = make_logpsi(flow, L, rs)
     logpsix = logpsi(x, params, s)
@@ -52,7 +57,7 @@ def test_logpsi2():
     depth, spsize, tpsize, Nf, L, K = 3, 16, 16, 5, 1.234, 8
     rs = 1.0
     n, dim = 14, 3
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, rs)
 
     logpsi = make_logpsi(flow, L, rs)
     logp = make_logpsi2(logpsi)
@@ -79,7 +84,7 @@ def test_kinetic_energy():
     depth, spsize, tpsize, Nf, L, K = 3, 16, 16, 5, 1.234, 8
     rs = 1.0
     n, dim = 14, 3
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, rs)
 
     logpsi = make_logpsi(flow, L, rs)
     _, logpsi_grad_laplacian = make_logpsi_grad_laplacian(logpsi, forloop=True)
@@ -102,7 +107,7 @@ def test_laplacian():
     depth, spsize, tpsize, Nf, L, K = 2, 4, 4, 5, 1.234, 4 
     rs = 1.0 
     n, dim = 14, 3
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, rs)
 
     logpsi = make_logpsi(flow, L, rs)
     _, logpsi_grad_laplacian1 = make_logpsi_grad_laplacian(logpsi)
@@ -120,7 +125,7 @@ def test_laplacian_hutchinson():
     depth, spsize, tpsize, Nf, L, K = 2, 4, 4, 5, 1.234, 4 
     rs = 1.0 
     n, dim = 14, 3
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, rs)
 
     batch = 4000
 
@@ -138,3 +143,4 @@ def test_laplacian_hutchinson():
     print("batch:", batch)
     print("laplacian:", laplacian)
     print("laplacian hutchinson mean:", laplacian2_mean, "\tstd:", laplacian2_std)
+

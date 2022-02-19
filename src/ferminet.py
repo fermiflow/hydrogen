@@ -5,6 +5,7 @@ import haiku as hk
 from typing import Optional
 
 from utils import logdet_matmul
+from potential import kpoints
 
 class FermiNet(hk.Module):
 
@@ -17,6 +18,7 @@ class FermiNet(hk.Module):
                  K: int = 0,
                  init_stddev:float = 0.01,
                  rs: Optional[float] = 1.4,
+                 indices: Optional[jnp.ndarray] = None,
                  name: Optional[str] = None
                  ):
         super().__init__(name=name)
@@ -26,7 +28,8 @@ class FermiNet(hk.Module):
         self.K = K
         self.init_stddev = init_stddev
         self.rs = rs
-
+        self.indices = indices
+        
         self.fc1 = [hk.Linear(h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
         self.fc2 = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth-1)]
     
@@ -43,9 +46,8 @@ class FermiNet(hk.Module):
         
         #|r| calculated with periodic consideration
         r = jnp.linalg.norm(jnp.sin(2*np.pi*rij/self.L)+jnp.eye(n)[..., None], axis=-1) *(1.0-jnp.eye(n))
-        r = r[..., None]
         
-        f = [r]
+        f = [r[..., None]]
         for n in range(1, self.Nf+1):
             f += [jnp.cos(2*np.pi*rij*n/self.L), jnp.sin(2*np.pi*rij*n/self.L)]
         return jnp.concatenate(f, axis=-1)
@@ -90,27 +92,28 @@ class FermiNet(hk.Module):
         final = hk.Linear(dim, w_init=hk.initializers.TruncatedNormal(self.init_stddev))
 
         if self.K > 0:
-            
+
+            #jastrow
+            rmj = jnp.reshape(x[:n//2], (n//2, 1, dim)) - jnp.reshape(x[n//2:], (1, n//2, dim)) 
+            r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rmj/self.L), axis=-1)*(self.L/(2*jnp.pi))
+            alpha = hk.get_parameter("alpha", [self.K], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            jastrow = jnp.exp(-jnp.sum(self.rs*r/(1+  jax.nn.softplus(alpha)[:, None, None] * r), axis=1)) # sum over protons
 
             #orbital
-            w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            b = hk.get_parameter("b", [self.K, h1.shape[-1]], init=jnp.zeros)
-        
-            phi = jnp.einsum("ia,kab,jb->kij", h1[:n//2], w, h1[n//2:]) + \
-                  jnp.einsum("ia,ka->ki", h1[:n//2], b)[:, :, None]  + \
-                  jnp.ones((n//2,n//2))[None, :, :]
+            w = hk.get_parameter("w", [self.K, n//4, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            b = hk.get_parameter("b", [self.K, n//4], init=jnp.zeros)
 
-            #envlope
+            phi_up = jnp.einsum("kia,ja->kij", w, h1[n//2:n//2+n//4]) + b[:, :, None] +jnp.ones((n//4,n//4))[None, :, :]
+            phi_dn = jnp.einsum("kia,ja->kij", w, h1[n//2+n//4:]) + b[:, :, None] +jnp.ones((n//4,n//4))[None, :, :]
+
+            #plane-wave envelope
+            k = 2*jnp.pi/self.L * self.indices
             z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
-            rpe = jnp.reshape(x[:n//2], (n//2, 1, dim)) - jnp.reshape(z, (1, n//2, dim)) 
-            rpe = rpe - self.L*jnp.rint(rpe/self.L)
-            r = jnp.linalg.norm(rpe, axis=-1)
-
-            alpha = hk.get_parameter("alpha", [self.K], init=hk.initializers.TruncatedNormal(mean=jnp.log(jnp.exp(self.rs) -1.0),stddev=self.init_stddev))
-            alpha_r = jnp.einsum("k,ij->kij", jax.nn.softplus(alpha), r) # ensures it is positive so electron binds to proton
-            D = jnp.exp(-alpha_r) # e^(-r/a0) = e^(-r*rs) so a good initilization is alpha = rs
-                
-            _, logabsdet = logdet_matmul([D*phi])
+            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (k[:, None, :] * z[None, :n//4, :]).sum(axis=-1))
+            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (k[:, None, :] * z[None, n//4:, :]).sum(axis=-1))
+        
+            _, logabsdet = logdet_matmul([phi_up*D_up*jastrow[:, None, :n//4], 
+                                          phi_dn*D_dn*jastrow[:, None, n//4:]])
 
             return logabsdet
         else:
