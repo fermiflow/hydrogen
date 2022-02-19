@@ -31,6 +31,7 @@ parser.add_argument("--depth", type=int, default=2, help="FermiNet: network dept
 parser.add_argument("--spsize", type=int, default=16, help="FermiNet: single-particle feature size")
 parser.add_argument("--tpsize", type=int, default=16, help="FermiNet: two-particle feature size")
 parser.add_argument("--Nf", type=int, default=5, help="FermiNet: number of fequencies")
+parser.add_argument("--K", type=int, default=4, help="FermiNet: number of dets")
 
 # parameters relevant to th Ewald summation of Coulomb interaction.
 parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the Ewald summation of Coulomb potential")
@@ -81,6 +82,17 @@ sp_indices, Es = sp_orbitals(dim)
 sp_indices, Es = jnp.array(sp_indices), jnp.array(Es)
 sp_indices = sp_indices[:n//2]
 print("beta = %f, Ef = %d"% (beta, Es[n//2-1]))
+
+####################################################################################
+
+print("\n========== Initialize relevant quantities for Ewald summation ==========")
+
+from potential import kpoints, Madelung
+G = kpoints(dim, args.Gmax)
+Vconst = n * args.rs/L * Madelung(dim, args.kappa, G) 
+print("(scaled) Vconst:", Vconst/(n*args.rs/L)) 
+
+
 ####################################################################################
 
 print("\n========== Initialize normalizing flow ==========")
@@ -89,7 +101,7 @@ import haiku as hk
 from ferminet import FermiNet
 def forward_fn(x):
     for _ in range(args.steps):
-        model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, False)
+        model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, 0)
         x = model(x)
     return x
 network_flow = hk.transform(forward_fn)
@@ -108,7 +120,7 @@ logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 print("\n========== Initialize wavefunction ==========")
 
 def forward_fn(x):
-    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, True)
+    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, args.K, rs=args.rs, indices=sp_indices)
     return model(x)
 network_wfn = hk.transform(forward_fn)
 x_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
@@ -119,17 +131,8 @@ print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
 
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, \
                    make_logpsi2, make_quantum_score
-logpsi_novmap = make_logpsi(network_wfn, sp_indices, L)
+logpsi_novmap = make_logpsi(network_wfn, L, args.rs)
 logpsi2 = make_logpsi2(logpsi_novmap)
-
-####################################################################################
-
-print("\n========== Initialize relevant quantities for Ewald summation ==========")
-
-from potential import kpoints, Madelung
-G = kpoints(dim, args.Gmax)
-Vconst = n * args.rs/L * Madelung(dim, args.kappa, G) 
-print("(scaled) Vconst:", Vconst/(n*args.rs/L)) # should be -1.41865 for 3d 
 
 ####################################################################################
 
@@ -155,8 +158,8 @@ print("\n========== Checkpointing ==========")
 from utils import shard, replicate
 
 path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
-                   + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d" % \
-                      (args.steps, args.depth, args.spsize, args.tpsize, args.Nf) \
+                   + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d_K_%d" % \
+                      (args.steps, args.depth, args.spsize, args.tpsize, args.Nf, args.K) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_mcstddev_%g" % (args.mc_therm, args.mc_steps, args.mc_stddev) \
                    + ("_ht" if args.hutchinson else "") \

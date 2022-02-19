@@ -4,6 +4,9 @@ import numpy as np
 import haiku as hk
 from typing import Optional
 
+from utils import logdet_matmul
+from potential import kpoints
+
 class FermiNet(hk.Module):
 
     def __init__(self, 
@@ -12,18 +15,21 @@ class FermiNet(hk.Module):
                  h2_size:int, 
                  Nf:int,
                  L:float,
-                 is_wfn:bool,
+                 K: int = 0,
                  init_stddev:float = 0.01,
+                 rs: Optional[float] = 1.4,
+                 indices: Optional[jnp.ndarray] = None,
                  name: Optional[str] = None
                  ):
         super().__init__(name=name)
         self.depth = depth
         self.Nf = Nf
         self.L = L
-        self.is_wfn = is_wfn
+        self.K = K
         self.init_stddev = init_stddev
-
-
+        self.rs = rs
+        self.indices = indices
+        
         self.fc1 = [hk.Linear(h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
         self.fc2 = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth-1)]
     
@@ -40,9 +46,8 @@ class FermiNet(hk.Module):
         
         #|r| calculated with periodic consideration
         r = jnp.linalg.norm(jnp.sin(2*np.pi*rij/self.L)+jnp.eye(n)[..., None], axis=-1) *(1.0-jnp.eye(n))
-        r = r[..., None]
         
-        f = [r]
+        f = [r[..., None]]
         for n in range(1, self.Nf+1):
             f += [jnp.cos(2*np.pi*rij*n/self.L), jnp.sin(2*np.pi*rij*n/self.L)]
         return jnp.concatenate(f, axis=-1)
@@ -51,7 +56,7 @@ class FermiNet(hk.Module):
     def _combine(self, h1, h2):
         n = h1.shape[0]
 
-        partitions = [n//2, n//2+n//4] if self.is_wfn else [n]
+        partitions = [n//2, n//2+n//4] if self.K >0 else [n]
 
         h1s = jnp.split(h1, partitions, axis=0)
         h2s = jnp.split(h2, partitions, axis=0)
@@ -86,14 +91,30 @@ class FermiNet(hk.Module):
 
         final = hk.Linear(dim, w_init=hk.initializers.TruncatedNormal(self.init_stddev))
 
-        if self.is_wfn:
+        if self.K > 0:
 
-            w = hk.get_parameter("w", [n//4, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            b = hk.get_parameter("b", [n//4], init=jnp.zeros)
+            #jastrow
+            rmj = jnp.reshape(x[:n//2], (n//2, 1, dim)) - jnp.reshape(x[n//2:], (1, n//2, dim)) 
+            r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rmj/self.L), axis=-1)*(self.L/(2*jnp.pi))
+            alpha = hk.get_parameter("alpha", [self.K], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            jastrow = jnp.exp(-jnp.sum(self.rs*r/(1+  jax.nn.softplus(alpha)[:, None, None] * r), axis=1)) # sum over protons
 
-            phi_up = w@h1[n//2:n//2+n//4].T + b + jnp.ones((n//4,n//4))
-            phi_dn = w@h1[n//2+n//4:].T  + b + jnp.ones((n//4,n//4))
+            #orbital
+            w = hk.get_parameter("w", [self.K, n//4, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            b = hk.get_parameter("b", [self.K, n//4], init=jnp.zeros)
 
-            return final(h1[n//2:]) + x[n//2:], (phi_up, phi_dn)
+            phi_up = jnp.einsum("kia,ja->kij", w, h1[n//2:n//2+n//4]) + b[:, :, None] +jnp.ones((n//4,n//4))[None, :, :]
+            phi_dn = jnp.einsum("kia,ja->kij", w, h1[n//2+n//4:]) + b[:, :, None] +jnp.ones((n//4,n//4))[None, :, :]
+
+            #plane-wave envelope
+            k = 2*jnp.pi/self.L * self.indices
+            z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
+            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (k[:, None, :] * z[None, :n//4, :]).sum(axis=-1))
+            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (k[:, None, :] * z[None, n//4:, :]).sum(axis=-1))
+        
+            _, logabsdet = logdet_matmul([phi_up*D_up*jastrow[:, None, :n//4], 
+                                          phi_dn*D_dn*jastrow[:, None, n//4:]])
+
+            return logabsdet
         else:
             return final(h1) + x

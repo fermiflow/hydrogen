@@ -2,7 +2,7 @@ import subprocess
 import time 
 import re
 
-nickname = 'ones-eloc'
+nickname = 'atom-positive-alpha'
 
 ###############################
 nlist = [14]
@@ -12,11 +12,12 @@ Tlist = [1500]
 dim = 3
 
 Gmax = 15
-steps, depth = 1, 2
+steps, depth = 1, 3
 h1size, h2size = 32, 16
 Nf = 5 
+K = 8
 
-lr = 0.01
+lr = 0.1
 decay = 1e-2
 damping = 1e-3
 max_norm = 1e-3
@@ -25,7 +26,7 @@ clip_factor = 5.0
 mc_steps = 50
 mc_stddev = 0.05
 
-batchsize, acc_steps = 1024, 1 
+batchsize, acc_steps = 2048, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -37,7 +38,7 @@ def submitJob(bin,args,jobname,run=False,wait=None):
 #SBATCH --partition=v100
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
-#SBATCH --time=48:00:00
+#SBATCH --time=72:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
 #SBATCH --error=%s'''%(jobname,jobname+'.log',jobname+'.log')

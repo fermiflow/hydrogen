@@ -8,8 +8,6 @@ if __name__=='__main__':
     parser.add_argument("--waitfor", type=int, help="wait for this job for finish")
     input = parser.parse_args()
 
-    #default parameters 
-    jobdir='../jobs/'
 
     #this import might overwrite the above default parameters 
     #########################################################
@@ -28,6 +26,10 @@ if __name__=='__main__':
         sys.exit(1)
     #########################################################
 
+    jobdir='../jobs/' + nickname + '/'
+    cmd = ['mkdir', '-p', jobdir]
+    subprocess.check_call(cmd)
+
     cmd = ['mkdir', '-p', resfolder]
     subprocess.check_call(cmd)
     
@@ -45,6 +47,7 @@ if __name__=='__main__':
                         'spsize': h1size,
                         'tpsize': h2size,
                         'Nf': Nf, 
+                        'K': K,
                         'folder':resfolder,
                         'batch':batchsize,
                         'mc_steps':mc_steps,
@@ -56,7 +59,7 @@ if __name__=='__main__':
                         'clip_factor': clip_factor,
                         'acc_steps': acc_steps,
                         }
-                jobname = jobdir 
+                jobname = jobdir
                 for key, val in args.items():
                     if key != 'folder':
                         jobname +=  str(key) + str(val) + '_'

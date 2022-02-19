@@ -25,12 +25,12 @@ def parse_filename(f):
     maxnorm = _parse(float, 'norm_([0-9]*\.?[0-9]*)', f)
     b = _parse(int, '_bs_([0-9]*)', f)
 
+    K = _parse(int, '_K_([0-9]*)', f)
     Nf = _parse(int, '_Nf_([0-9]*)', f)
 
     acc = _parse(int, '_accsteps_([0-9]*)', f)
 
-    return n, dim, rs, T, s, d, h1, h2, b, acc, lr, decay, eta, maxnorm, Nf, clip
-
+    return n, dim, rs, T, s, d, h1, h2, b, acc, lr, decay, eta, maxnorm, Nf, clip, K
 
 def natural_sort(l):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
