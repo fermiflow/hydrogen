@@ -5,7 +5,6 @@ import haiku as hk
 from typing import Optional
 
 from utils import logdet_matmul
-from potential import kpoints
 
 class FermiNet(hk.Module):
 

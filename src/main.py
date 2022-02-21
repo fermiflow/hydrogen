@@ -179,7 +179,7 @@ from VMC import sample_s_and_x
 if ckpt_filename is not None:
     print("Load checkpoint file: %s, epoch finished: %g" %(ckpt_filename, epoch_finished))
     ckpt = checkpoint.load_data(ckpt_filename)
-    keys, x, params_flow, params_wfn, opt_state = \
+    keys, s, x, params_flow, params_wfn, opt_state = \
         ckpt["keys"], ckpt["s"], ckpt["x"], ckpt["params_flow"], ckpt["params_wfn"], ckpt["opt_state"]
     s, x, keys = shard(s), shard(x), shard(keys)
     params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
@@ -264,7 +264,7 @@ time_of_last_ckpt = time.time()
 log_filename = os.path.join(path, "data.txt")
 f = open(log_filename, "w" if epoch_finished == 0 else "a",
             buffering=1, newline="\n")
-if epoch_finished == 0:
+if os.path.getsize(f)==0:
     f.write("epoch f f_err e e_err k k_err vpp vpp_err vep vep_err vee vee_err p p_err s s_err acc_s acc_x\n")
 for i in range(epoch_finished + 1, args.epoch + 1):
 

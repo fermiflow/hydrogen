@@ -2,31 +2,31 @@ import subprocess
 import time 
 import re
 
-nickname = 'atom-positive-alpha'
+nickname = 'jastrow'
 
 ###############################
-nlist = [14]
-rslist = [1.4]
-Tlist = [1500]
+nlist = [54]
+rslist = [0.8]
+Tlist = [1000]
 
 dim = 3
 
 Gmax = 15
 steps, depth = 1, 3
 h1size, h2size = 32, 16
-Nf = 5 
-K = 8
+Nf = 5
+K = 4
 
-lr = 0.1
+lr = 0.05
 decay = 1e-2
 damping = 1e-3
 max_norm = 1e-3
 clip_factor = 5.0
 
-mc_steps = 50
-mc_stddev = 0.05
+mc_steps = 100
+mc_stddev = 0.02
 
-batchsize, acc_steps = 2048, 1
+batchsize, acc_steps = 128, 8
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -36,9 +36,9 @@ def submitJob(bin,args,jobname,run=False,wait=None):
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=v100
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --nodes=1
-#SBATCH --time=72:00:00
+#SBATCH --time=100:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
 #SBATCH --error=%s'''%(jobname,jobname+'.log',jobname+'.log')
@@ -63,7 +63,7 @@ echo Job started at `date`\n'''
     job +='python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
-    job += '--sr'
+    job += '--sr' 
     job += '''
 echo Job finished at `date`\n'''
 
