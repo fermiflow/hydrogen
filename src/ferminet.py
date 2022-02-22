@@ -17,7 +17,6 @@ class FermiNet(hk.Module):
                  K: int = 0,
                  init_stddev:float = 0.01,
                  rs: Optional[float] = 1.4,
-                 indices: Optional[jnp.ndarray] = None,
                  name: Optional[str] = None
                  ):
         super().__init__(name=name)
@@ -27,8 +26,7 @@ class FermiNet(hk.Module):
         self.K = K
         self.init_stddev = init_stddev
         self.rs = rs
-        self.indices = indices
-        
+  
         self.fc1 = [hk.Linear(h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
         self.fc2 = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth-1)]
     
@@ -67,7 +65,8 @@ class FermiNet(hk.Module):
 
         return jnp.concatenate([h1] + g1 + g2, axis=1) 
 
-    def __call__(self, x):
+    def __call__(self, x, kpoints=None):
+
         n, dim = x.shape[0], x.shape[1]
 
         h1 = self._h1(x) 
@@ -106,14 +105,13 @@ class FermiNet(hk.Module):
             phi_dn = jnp.einsum("kia,ja->kij", w, h1[n//2+n//4:]) + b[:, :, None] +jnp.ones((n//4,n//4))[None, :, :]
 
             #plane-wave envelope
-            k = 2*jnp.pi/self.L * self.indices
             z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
-            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (k[:, None, :] * z[None, :n//4, :]).sum(axis=-1))
-            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (k[:, None, :] * z[None, n//4:, :]).sum(axis=-1))
+            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:, None, :] * z[None, :n//4, :]).sum(axis=-1))
+            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:, None, :] * z[None, n//4:, :]).sum(axis=-1))
         
-            _, logabsdet = logdet_matmul([phi_up*D_up*jastrow[:, None, :n//4], 
-                                          phi_dn*D_dn*jastrow[:, None, n//4:]])
-
-            return logabsdet
+            phase, logabsdet = logdet_matmul([phi_up*D_up*jastrow[:, None, :n//4], 
+                                              phi_dn*D_dn*jastrow[:, None, n//4:]])
+            
+            return logabsdet + jnp.log(phase) 
         else:
             return final(h1) + x

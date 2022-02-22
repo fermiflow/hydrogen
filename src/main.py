@@ -119,12 +119,13 @@ logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 
 print("\n========== Initialize wavefunction ==========")
 
-def forward_fn(x):
-    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, args.K, rs=args.rs, indices=sp_indices)
-    return model(x)
+def forward_fn(x, k):
+    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, args.K, rs=args.rs)
+    return model(x, k)
 network_wfn = hk.transform(forward_fn)
-x_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
-params_wfn = network_wfn.init(key, x_dummy)
+sx_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
+k_dummy = jax.random.uniform(key, (n//2, dim), minval=0, maxval=2*jnp.pi/L)
+params_wfn = network_wfn.init(key, sx_dummy, k_dummy)
 
 raveled_params_wfn, _ = ravel_pytree(params_wfn)
 print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
@@ -206,10 +207,10 @@ else:
 
     for i in range(args.mc_therm):
         print("---- thermal step %d ----" % (i+1))
-        keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
+        keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                    logprob, s, params_flow,
                                    logpsi2, x, params_wfn,
-                                   args.mc_steps, args.mc_stddev, L)
+                                   args.mc_steps, args.mc_stddev, L, sp_indices)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
     print("x shape:", x.shape, "\t\ttype:", type(x))
 
@@ -227,15 +228,15 @@ observable_and_lossfn = make_loss(logprob, logpsi, logpsi_grad_laplacian,
 from functools import partial
 
 @partial(jax.pmap, axis_name="p",
-        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0, None) if args.sr else (0, 0, None, 0, 0, 0, 0, None, None, None),
+        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0, 0, None) if args.sr else (0, 0, None, 0, 0, 0, 0, 0, None, None, None),
         out_axes=(0, 0, None, 0, 0, 0, 0, 0) if args.sr else (0, 0, None, 0, 0, None, None, None),
-        static_broadcasted_argnums=10 if args.sr else (7, 8, 9, 10),
+        static_broadcasted_argnums=11 if args.sr else (8, 9, 10, 11),
         donate_argnums=(3, 4))
-def update(params_flow, params_wfn, opt_state, s, x, key, grads_acc,
+def update(params_flow, params_wfn, opt_state, ks, s, x, key, grads_acc,
         classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc, final_step):
 
     data, classical_lossfn, quantum_lossfn = observable_and_lossfn(
-            params_flow, params_wfn, s, x, key)
+            params_flow, params_wfn, ks, s, x, key)
 
     grad_params_flow = jax.grad(classical_lossfn)(params_flow)
     grad_params_wfn = jax.grad(quantum_lossfn)(params_wfn)
@@ -244,7 +245,7 @@ def update(params_flow, params_wfn, opt_state, s, x, key, grads_acc,
     grads_acc = jax.tree_multimap(lambda acc, i: acc + i, grads_acc, grads)
 
     if args.sr:
-        classical_fisher, quantum_fisher, quantum_score_mean = fishers_fn(params_flow, params_wfn, s, x)
+        classical_fisher, quantum_fisher, quantum_score_mean = fishers_fn(params_flow, params_wfn, ks, s, x)
         classical_fisher_acc += classical_fisher
         quantum_fisher_acc += quantum_fisher
         quantum_score_mean_acc += quantum_score_mean
@@ -281,10 +282,10 @@ for i in range(epoch_finished + 1, args.epoch + 1):
     ar_x_acc = shard(jnp.zeros(num_devices))
 
     for acc in range(args.acc_steps):
-        keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
+        keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                                logprob, s, params_flow,
                                                logpsi2, x, params_wfn,
-                                               args.mc_steps, args.mc_stddev, L)
+                                               args.mc_steps, args.mc_stddev, L, sp_indices)
         ar_s_acc += ar_s
         ar_x_acc += ar_x
 
@@ -292,8 +293,7 @@ for i in range(epoch_finished + 1, args.epoch + 1):
 
         params_flow, params_wfn, opt_state, data, grads_acc, \
         classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc \
-            = update(params_flow, params_wfn, opt_state, s, x, keys, grads_acc,
-                     classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc, final_step)
+            = update(params_flow, params_wfn, opt_state, ks, s, x, keys, grads_acc, classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc, final_step)
 
         data = jax.tree_map(lambda x: x[0], data)
         if acc == 0:

@@ -9,27 +9,33 @@ from MCMC import mcmc
                    in_axes=(0, 
                             None, 0, 0, 
                             None, 0, 0, 
-                            None, None, None),
+                            None, None, None, None),
                    static_broadcasted_argnums=(1, 4))
 def sample_s_and_x(key,
                        logprob, s, params_flow,
                        logpsi2, x, params_wfn,
-                       mc_steps, mc_stddev, L):
+                       mc_steps, mc_stddev, L, sp_indices):
     """
-        Generate new state_indices of shape (batch, n), as well as coordinate sample
+        Generate new proton samples of shape (batch, n, dim), as well as coordinate sample
     of shape (batch, n, dim), from the sample of last optimization step.
     """
-    key, key_proton, key_electron = jax.random.split(key, 3)
-    
+    key, key_momenta, key_proton, key_electron = jax.random.split(key, 4)
+
+    # sample momenta 
+    batchsize, n, dim = s.shape[0], s.shape[1], s.shape[2]
+    twist = jax.random.uniform(key_momenta, (batchsize, dim), minval=-0.5, maxval=0.5)
+    k = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) # (batchsize, n, dim)
+
     # proton move
     s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), s, key_proton, mc_steps, mc_stddev)
     s -= L * jnp.floor(s/L)
     
     # electron move
-    x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, s), x, key_electron, mc_steps, mc_stddev)
+    ks = jnp.concatenate([k,s], axis=1)
+    x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, ks), x, key_electron, mc_steps, mc_stddev)
     x -= L * jnp.floor(x/L)
 
-    return key, s, x, proton_acc_rate, electron_acc_rate
+    return key, ks, s, x, proton_acc_rate, electron_acc_rate
 
 ####################################################################################
 
@@ -37,9 +43,10 @@ from potential import potential_energy
 
 def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, beta, clip_factor):
 
-    def observable_and_lossfn(params_flow, params_wfn, s, x, key):
+    def observable_and_lossfn(params_flow, params_wfn, ks, s, x, key):
+
         logp_states = logprob(params_flow, s)
-        grad, laplacian = logpsi_grad_laplacian(x, params_wfn, s, key)
+        grad, laplacian = logpsi_grad_laplacian(x, params_wfn, ks, key)
         print("grad.shape:", grad.shape)
         print("laplacian.shape:", laplacian.shape)
 
@@ -87,7 +94,7 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
             return gradF_phi
 
         def quantum_lossfn(params_wfn):
-            logpsix = logpsi(x, params_wfn, s)
+            logpsix = logpsi(x, params_wfn, ks)
 
             tv = jax.lax.pmean(jnp.abs(Eloc - E).mean(), axis_name="p")
             Eloc_clipped = jnp.clip(Eloc, E - clip_factor*tv, E + clip_factor*tv)

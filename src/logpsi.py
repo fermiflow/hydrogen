@@ -5,22 +5,23 @@ from functools import partial
 
 def make_logpsi(flow, L, rs):
 
-    def logpsi(x, params, s):
+    def logpsi(x, params, ks):
 
         """
-            Generic function that computes ln Psi(x) given proton position
+            Generic function that computes ln Psi(x) given momenta `k` and proton position
         `s`, a set of electron coordinates `x`, and flow parameters `params`.
 
         INPUT:
             x: (n, dim)     
-            s: (n, dim)
+            ks: (n//2+n, dim)
 
         OUTPUT:
             a single complex number ln Psi(x), given in the form of a 2-tuple (real, imag).
         """
         
         n, dim = x.shape
-        log_phi = flow.apply(params, None, jnp.concatenate([s, x]))
+        k, s = jnp.split(ks, [n//2])
+        log_phi = flow.apply(params, None, jnp.concatenate([s, x]), k)
     
         return jnp.stack([log_phi.real,
                           log_phi.imag])

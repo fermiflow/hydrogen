@@ -8,49 +8,6 @@ from jax.flatten_util import ravel_pytree
 
 from optax._src import base
 
-FisherSRState = base.EmptyState
-
-def fisher_sr(score_fn, damping, max_norm):
-    """
-        SR for a purely classical probabilistic model, which is also known as the
-    natural gradient descent in machine-learning literatures.
-    """
-
-    def init_fn(params):
-        return FisherSRState()
-
-    def update_fn(grads, state, params):
-        """
-            NOTE: as the computation of Fisher information metric calls for the
-        Monte-Carlo sample `state_indices`, we manually place them within the
-        `params` argument.
-        """
-        params, state_indices = params
-
-        grads_raveled, grads_unravel_fn = ravel_pytree(grads)
-        print("grads.shape:", grads_raveled.shape)
-
-        score = score_fn(params, state_indices)
-        score_raveled = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(score)
-        print("score.shape:", score_raveled.shape)
-
-        batch_per_device = score_raveled.shape[0]
-
-        fisher = jax.lax.pmean(score_raveled.T.dot(score_raveled) / batch_per_device, axis_name='p')
-        fisher += damping * jnp.eye(fisher.shape[0])
-        updates_raveled = jax.scipy.linalg.solve(fisher, grads_raveled)
-        #scale gradient according to gradnorm
-        gnorm = jnp.sum(grads_raveled * updates_raveled)
-        scale = jnp.minimum(jnp.sqrt(max_norm/gnorm), 1)
-        updates_raveled *= -scale
-        updates = grads_unravel_fn(updates_raveled)
-
-        return updates, state
-
-    return base.GradientTransformation(init_fn, update_fn)
-
-####################################################################################
-
 def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, alpha, decay, damping, max_norm):
     """
         Hybrid SR for both a classical probabilistic model and a set of
@@ -60,11 +17,11 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, alpha, decay, damping
     def init_fn(params):
         return {'step': 0}
 
-    def fishers_fn(params_van, params_flow, state_indices, x):
-        classical_score = classical_score_fn(params_van, state_indices)
+    def fishers_fn(params_van, params_flow, ks, s, x):
+        classical_score = classical_score_fn(params_van, s)
         classical_score = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(classical_score)
 
-        quantum_score = quantum_score_fn(x, params_flow, state_indices)
+        quantum_score = quantum_score_fn(x, params_flow, ks)
         quantum_score = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(quantum_score)
         print("classical_score.shape:", classical_score.shape)
         print("quantum_score.shape:", quantum_score.shape)
@@ -84,7 +41,7 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, alpha, decay, damping
     def update_fn(grads, state, params):
         """
             NOTE: as the computation of (classical and quantum) Fisher information
-        metrics calls for the Monte-Carlo sample `state_indices` and `x`, we manually
+        metrics calls for the Monte-Carlo sample `s` and `x`, we manually
         place them within the `params` argument.
         """
         grad_params_van, grad_params_flow = grads

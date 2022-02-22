@@ -48,6 +48,6 @@ def logdet_matmul(xs: Sequence[jnp.ndarray],
   else:
     result = jnp.dot(det, w)
 
-  sign_out = jnp.sign(result)
+  sign_out = result/jnp.abs(result)
   log_out = jnp.log(jnp.abs(result)) + maxlogdet
   return sign_out, log_out
