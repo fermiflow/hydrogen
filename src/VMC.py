@@ -22,9 +22,9 @@ def sample_s_and_x(key,
     key, key_momenta, key_proton, key_electron = jax.random.split(key, 4)
 
     # sample momenta 
-    batchsize, n, dim = s.shape[0], s.shape[1], s.shape[2]
+    batchsize, dim = s.shape[0], s.shape[2]
     twist = jax.random.uniform(key_momenta, (batchsize, dim), minval=-0.5, maxval=0.5)
-    k = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) # (batchsize, n, dim)
+    k = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) # (batchsize, n//2, dim)
 
     # proton move
     s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), s, key_proton, mc_steps, mc_stddev)

@@ -73,7 +73,7 @@ def test_twist():
     logpsi = make_logpsi(flow, L, rs)
     logpsix = logpsi(x, params, jnp.concatenate([k,s], axis=0))
 
-    print("---- Test Psi_n(x + R) = Psi_n(x) exp^{i*theta*R} under any lattice translation `R` of PBC with twisted BC----")
+    print("---- Test Psi_n(x + R) = Psi_n(x) exp^{i*theta} under any lattice translation `R` with twisted BC----")
     image = np.random.randint(-5, 6, size=(n, dim)) * L
     logpsix_image = logpsi(x + image, params, jnp.concatenate([k,s], axis=0))
     print("logpsix:", logpsix[0] + 1J*logpsix[1])
