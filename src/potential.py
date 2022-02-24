@@ -33,14 +33,14 @@ def Madelung(dim, kappa, G):
 
     return g_k.sum() + g_0 - 2*kappa/jnp.sqrt(jnp.pi)
 
-def psi(rij, kappa, G):
+def psi(rij, kappa, G, forloop=True):
     """
         The electron coordinate-dependent part 1/2 \sum_{i}\sum_{j neq i} psi(r_i, r_j)
     of the electrostatic energy (per cell) for a periodic system of lattice constant L=1.
         NOTE: to account for the Madelung part `Vconst` returned by the function
     `Madelung`, add the term 0.5*n*Vconst.
     """
-    dim = rij.shape[-1]
+    dim = rij.shape[0]
 
     # Only the nearest neighbor is taken into account in the present implementation of real-space summation.
     dij = jnp.linalg.norm(rij, axis=-1)
@@ -55,7 +55,13 @@ def psi(rij, kappa, G):
         g_k = erfc(jnp.pi * Gnorm / kappa) / Gnorm
         g_0 = -2 * jnp.sqrt(jnp.pi) / kappa
 
-    V_longrange = ( g_k * jnp.cos(2*jnp.pi * jnp.sum(G*rij, axis=-1)) ).sum() \
+    if forloop:
+        def _body_fun(i, val):
+            return val + g_k[i] * jnp.cos(2*jnp.pi * jnp.sum(G[i]*rij))  
+        V_longrange = jax.lax.fori_loop(0, G.shape[0], _body_fun, 0.0) + g_0
+    
+    else:
+        V_longrange = ( g_k * jnp.cos(2*jnp.pi * jnp.sum(G*rij, axis=-1)) ).sum() \
                     + g_0 
      
     potential = V_shortrange + V_longrange
@@ -97,32 +103,4 @@ def potential_energy(x, kappa, G, L, rs):
 
     return 2*rs/L*v_pp , 2*rs/L * v_ep , 2*rs/L*v_ee
 
-if __name__=='__main__':
-    batchsize, n, dim = 10, 14, 3 
-    L, rs = 2.0 , 1.0
-    
-    key = jax.random.PRNGKey(42)
-    x = jax.random.uniform(key, (batchsize, n, dim), minval=0.0, maxval=L)
-    x = x - L*jnp.rint(x/L)
 
-    Gmax, kappa = 15, 7.0
-
-    G = kpoints(dim, Gmax)
-
-    V = potential_energy(x, kappa, G, L, rs) 
-    print (V)
-
-    import ewald3
-    NG = 12
-    def ewald(x):
-        n = x.shape[0]
-        Z = jnp.concatenate([jnp.ones(n//2), -jnp.ones(n//2)])
-        i,j = np.triu_indices(n, k=1)
-        Zij = (Z[:, None] * Z)[i,j]
-        rij = (jnp.reshape(x, (n, 1, dim)) - jnp.reshape(x, (1, n, dim)))[i,j]
-        return jnp.sum(Zij*jax.vmap(ewald3.psi,(0, None, None, None), 0)(rij, kappa, L, NG))
- 
-    print (2*rs*jax.vmap(ewald)(x))
-
-
-    print (Madelung(dim, kappa, G))
