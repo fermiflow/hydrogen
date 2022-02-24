@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 
-def make_flow(network, n, dim, L):
+def make_flow(network, n, dim, L, beta, rs):
     
     @partial(jax.jit, static_argnums=2)
     def logprob(params, s, scan=False):
@@ -19,7 +19,28 @@ def make_flow(network, n, dim, L):
             jac = jax.jacfwd(flow_flatten)(s_flatten)
         
         _, logdetjac = jnp.linalg.slogdet(jac)
-        return logdetjac - (n*dim*np.log(L) + jax.scipy.special.gammaln(n+1))
+        
+        #return logdetjac - (n*dim*np.log(L) + jax.scipy.special.gammaln(n+1)) #uniform base
+
+        z = network.apply(params, None, s)
+        return logdetjac + _base_logp(z)
+    
+    def _lj(r):
+        epsilon = 2*0.18                   # h2 binding enegy = 0.18 au, here 2 for au to Ry
+        sigma = 1.4/rs/(2**(1/6))          # h2 bond length = 1.4 au = 2**(1/6)*sigma
+        return 4*epsilon*((sigma/r)**12 - (sigma/r)**6)
+    
+    def _base_logp(z):
+        rc = L/2
+
+        z = z - L * jnp.floor(z/L)
+        i, j = jnp.triu_indices(n, k=1)
+        rij = (jnp.reshape(z, (n, 1, dim)) - jnp.reshape(z, (1, n, dim)))[i, j]
+        #r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rij/L), axis=-1)*(L/(2*jnp.pi))
+        r = jnp.linalg.norm(rij, axis=-1)
+
+        f_vmap = jax.vmap(_lj)
+        return -beta * jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_lj(rc)) 
         
     return logprob
 

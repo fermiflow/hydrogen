@@ -40,7 +40,8 @@ parser.add_argument("--kappa", type=int, default=10, help="screening parameter (
 # MCMC.
 parser.add_argument("--mc_therm", type=int, default=10, help="MCMC thermalization steps")
 parser.add_argument("--mc_steps", type=int, default=50, help="MCMC update steps")
-parser.add_argument("--mc_stddev", type=float, default=0.1, help="standard deviation of the Gaussian proposal in MCMC update")
+parser.add_argument("--mc_width_proton", type=float, default=0.01, help="standard deviation of the Gaussian proposal in MCMC update")
+parser.add_argument("--mc_width_electron", type=float, default=0.05, help="standard deviation of the Gaussian proposal in MCMC update")
 
 # technical miscellaneous
 parser.add_argument("--hutchinson", action='store_true',  help="use Hutchinson's trick to compute the laplacian")
@@ -112,8 +113,9 @@ raveled_params_flow, _ = ravel_pytree(params_flow)
 print("#parameters in the flow model: %d" % raveled_params_flow.size)
 
 from sampler import make_flow, make_classical_score
-logprob_novmap = make_flow(network_flow, n, dim, L)
+logprob_novmap = make_flow(network_flow, n, dim, L, beta, args.rs)
 logprob = jax.vmap(logprob_novmap, (None, 0), 0)
+grad_logprob = jax.vmap(jax.grad(logprob_novmap, argnums=1), (None, 0), 0)
 
 ####################################################################################
 
@@ -133,7 +135,7 @@ print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, \
                    make_logpsi2, make_quantum_score
 logpsi_novmap = make_logpsi(network_wfn, L, args.rs)
-logpsi2 = make_logpsi2(logpsi_novmap)
+logpsi2, grad_logpsi2 = make_logpsi2(logpsi_novmap)
 
 ####################################################################################
 
@@ -162,7 +164,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d_K_%d" % \
                       (args.steps, args.depth, args.spsize, args.tpsize, args.Nf, args.K) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
-                   + "_mctherm_%d_mcsteps_%d_mcstddev_%g" % (args.mc_therm, args.mc_steps, args.mc_stddev) \
+                   + "_mctherm_%d_mcsteps_%d_mcp_%g_mce_%g" % (args.mc_therm, args.mc_steps, args.mc_width_proton, args.mc_width_electron) \
                    + ("_ht" if args.hutchinson else "") \
                    + ("_lr_%g_decay_%g_damping_%g_norm_%g" % (args.lr, args.decay, args.damping, args.max_norm) \
                         if args.sr else "_lr_%g" % args.lr) \
@@ -208,9 +210,10 @@ else:
     for i in range(args.mc_therm):
         print("---- thermal step %d ----" % (i+1))
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
-                                   logprob, s, params_flow,
-                                   logpsi2, x, params_wfn,
-                                   args.mc_steps, args.mc_stddev, L, sp_indices)
+                                   logprob, grad_logprob, s, params_flow,
+                                   logpsi2, grad_logpsi2, x, params_wfn,
+                                   args.mc_steps, args.mc_width_proton, args.mc_width_electron, L, sp_indices)
+        print ('acc:', ar_s, ar_x)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
     print("x shape:", x.shape, "\t\ttype:", type(x))
 
@@ -283,9 +286,9 @@ for i in range(epoch_finished + 1, args.epoch + 1):
 
     for acc in range(args.acc_steps):
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
-                                               logprob, s, params_flow,
-                                               logpsi2, x, params_wfn,
-                                               args.mc_steps, args.mc_stddev, L, sp_indices)
+                                               logprob, grad_logprob, s, params_flow,
+                                               logpsi2, grad_logpsi2, x, params_wfn,
+                                               args.mc_steps, args.mc_width_proton, args.mc_width_electron, L, sp_indices)
         ar_s_acc += ar_s
         ar_x_acc += ar_x
 
@@ -342,7 +345,7 @@ for i in range(epoch_finished + 1, args.epoch + 1):
                                                 S/n, S_std/n, 
                                                 ar_s, ar_x) )
 
-    if time.time() - time_of_last_ckpt > 3600:
+    if time.time() - time_of_last_ckpt > 600:
         ckpt = {"keys": keys, "s": s, "x": x,
                 "params_flow": jax.tree_map(lambda x: x[0], params_flow),
                 "params_wfn": jax.tree_map(lambda x: x[0], params_wfn),

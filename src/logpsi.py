@@ -114,12 +114,12 @@ def make_logpsi_grad_laplacian(logpsi, forloop=True, hutchinson=False):
 
 def make_logpsi2(logpsi):
 
-    @partial(jax.vmap, in_axes=(0, None, 0), out_axes=0)
     def logpsi2(x, params, s):
         """ logp = logpsi + logpsi* = 2 Re logpsi """
         return 2 * logpsi(x, params, s)[0]
 
-    return logpsi2
+    return jax.vmap(logpsi2, in_axes=(0, None, 0), out_axes=0) , \
+           jax.vmap(jax.grad(logpsi2), in_axes=(0, None, 0), out_axes=0) 
 
 def make_quantum_score(logpsi):
 

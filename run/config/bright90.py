@@ -12,21 +12,22 @@ Tlist = [1200]
 dim = 3
 
 Gmax = 15
-steps, depth = 1, 3
-h1size, h2size = 32, 16
+steps, depth = 1, 2
+h1size, h2size = 16, 16
 Nf = 5
-K = 4
+K = 1
 
-lr = 0.05
+lr = 0.01
 decay = 1e-2
 damping = 1e-3
 max_norm = 1e-3
 clip_factor = 5.0
 
 mc_steps = 100
-mc_stddev = 0.02
+mc_width_proton = 0.005
+mc_width_electron = 0.05
 
-batchsize, acc_steps = 1024, 1 
+batchsize, acc_steps = 1024, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -60,7 +61,7 @@ echo "CUDA devices $CUDA_VISIBLE_DEVICES"\n'''
 
     job += '''
 echo Job started at `date`\n'''
-    job +='python '+ str(bin) + ' '
+    job +='taskset -c 5 python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
     job += '--sr' 

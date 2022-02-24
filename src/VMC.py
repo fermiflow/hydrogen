@@ -7,14 +7,14 @@ from MCMC import mcmc
 
 @partial(jax.pmap, axis_name="p",
                    in_axes=(0, 
-                            None, 0, 0, 
-                            None, 0, 0, 
-                            None, None, None, None),
-                   static_broadcasted_argnums=(1, 4))
+                            None, None, 0, 0, 
+                            None, None, 0, 0, 
+                            None, None, None, None, None),
+                   static_broadcasted_argnums=(1, 2, 5, 6))
 def sample_s_and_x(key,
-                       logprob, s, params_flow,
-                       logpsi2, x, params_wfn,
-                       mc_steps, mc_stddev, L, sp_indices):
+                       logprob, grad_logprob, s, params_flow,
+                       logpsi2, grad_logpsi2, x, params_wfn,
+                       mc_steps, mc_stddev_proton, mc_stddev_electron, L, sp_indices):
     """
         Generate new proton samples of shape (batch, n, dim), as well as coordinate sample
     of shape (batch, n, dim), from the sample of last optimization step.
@@ -27,12 +27,16 @@ def sample_s_and_x(key,
     k = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) # (batchsize, n//2, dim)
 
     # proton move
-    s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), s, key_proton, mc_steps, mc_stddev)
+    s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), 
+                              lambda s: grad_logprob(params_flow, s), 
+                              s, key_proton, mc_steps, mc_stddev_proton)
     s -= L * jnp.floor(s/L)
     
     # electron move
     ks = jnp.concatenate([k,s], axis=1)
-    x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, ks), x, key_electron, mc_steps, mc_stddev)
+    x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, ks), 
+                                lambda x: grad_logpsi2(x, params_wfn, ks), 
+                                x, key_electron, mc_steps, mc_stddev_electron)
     x -= L * jnp.floor(x/L)
 
     return key, ks, s, x, proton_acc_rate, electron_acc_rate
