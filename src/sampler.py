@@ -32,6 +32,11 @@ def make_flow(network, n, dim, L, beta, rs):
 
     def _soft(r):
         return jnp.exp(-rs*r)
+
+    def _h2(r):
+        p = jnp.array([-1.0, 2.867, -5.819, -9.935, 4.456])
+        q = jnp.array([1.0, -3.005, 7.81, 2.104, 0.4839])
+        return jnp.polyval(p, r*rs)/ jnp.polyval(q, r*rs) * 2 # ( Hr = 2 Ry, a_B = a/rs )
     
     def _base_logp(z):
         rc = L/2
@@ -42,7 +47,7 @@ def make_flow(network, n, dim, L, beta, rs):
         #r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rij/L), axis=-1)*(L/(2*jnp.pi))
         r = jnp.linalg.norm(rij, axis=-1)
     
-        _f = _soft
+        _f = _h2
         f_vmap = jax.vmap(_f)
         return -beta * jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
         

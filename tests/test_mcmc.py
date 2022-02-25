@@ -10,7 +10,7 @@ def test_mcmc():
     batchsize = 1024
 
     mc_steps = 100
-    mc_stddev = 1e-4
+    mc_stddev = 1e-6
     rs = 1.44
     L = (4/3*jnp.pi*n)**(1/3)
 
@@ -21,6 +21,11 @@ def test_mcmc():
 
     def _soft(r):
         return jnp.exp(-rs*r)
+
+    def _h2(r):
+        p = jnp.array([-1.0, 2.867, -5.819, -9.935, 4.456])
+        q = jnp.array([1.0, -3.005, 7.81, 2.104, 0.4839])
+        return jnp.polyval(p, r*rs)/ jnp.polyval(q, r*rs) * 2 # ( Hr = 2 Ry, a_B = a/rs )
    
     def logprob(z):
         rc = L/2
@@ -29,7 +34,7 @@ def test_mcmc():
         rij = (jnp.reshape(z, (n, 1, dim)) - jnp.reshape(z, (1, n, dim)))[i, j]
         r = jnp.linalg.norm(rij, axis=-1)
     
-        _f = _soft
+        _f = _h2
         f_vmap = jax.vmap(_f)
         return -beta * jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
     
@@ -57,14 +62,14 @@ def test_mcmc():
     s, keys = shard(s), shard(keys)
     
     mcmc_p = jax.pmap(mcmc, axis_name="p", in_axes=(None, None, 0, 0, None, None), static_broadcasted_argnums=(0, 1))
+
     s, acc_rate = mcmc_p(logprob, force, s, keys, mc_steps, mc_stddev) 
     s -= L * jnp.floor(s/L)
-
     r_mean = jnp.mean(jax.vmap(mean_dist)(s.reshape(batchsize, n, dim)))
     print (acc_rate, r_mean)
 
     s, acc_rate = mcmc_p(logprob, None, s, keys, mc_steps, mc_stddev) 
-
+    s -= L * jnp.floor(s/L)
     r_mean = jnp.mean(jax.vmap(mean_dist)(s.reshape(batchsize, n, dim)))
     print (acc_rate, r_mean)
 
