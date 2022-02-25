@@ -26,9 +26,14 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_stddev=0.02):
         
         x_proposal = x + f * mc_stddev + jnp.sqrt(mc_stddev) * jax.random.normal(key_proposal, x.shape)
         logp_proposal = logp_fn(x_proposal)
-        f_proposal = force_fn(x_proposal)
+
+        if force_fn is not None:
+            f_proposal = force_fn(x_proposal)
+            diff = jnp.sum(0.5*(f + f_proposal)*((x - x_proposal) + mc_stddev/4*(f - f_proposal)), axis=(1,2))
+        else:
+            f_proposal = jnp.zeros_like(x_proposal)
+            diff = jnp.zeros_like(logp_proposal)
         
-        diff = jnp.sum(0.5*(f + f_proposal)*((x - x_proposal) + mc_stddev/4*(f - f_proposal)), axis=(1,2))
         ratio = jnp.exp(diff + (logp_proposal - logp))
         accept = jax.random.uniform(key_accept, ratio.shape) < ratio
 
@@ -39,7 +44,12 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_stddev=0.02):
         return x_new, logp_new, f_new, key, num_accepts
     
     logp_init = logp_fn(x_init)
-    f_init = force_fn(x_init)
+
+    if force_fn is not None:
+        f_init = force_fn(x_init)
+    else:
+        f_init = jnp.zeros_like(x_init)
+
     x, logp, f, key, num_accepts = jax.lax.fori_loop(0, mc_steps, step, (x_init, logp_init, f_init, key, 0.))
     batch = x.shape[0]
     accept_rate = jax.lax.pmean(num_accepts / (mc_steps * batch), axis_name="p")

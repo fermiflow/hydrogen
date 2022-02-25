@@ -24,8 +24,8 @@ max_norm = 1e-3
 clip_factor = 5.0
 
 mc_steps = 100
-mc_width_proton = 0.005
-mc_width_electron = 0.05
+mc_width_proton = 0.0001
+mc_width_electron = 0.01
 
 batchsize, acc_steps = 1024, 1
 ###############################
@@ -37,7 +37,7 @@ def submitJob(bin,args,jobname,run=False,wait=None):
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=a100
-#SBATCH --gres=gpu:A100_40G:1
+#SBATCH --gres=gpu:A100_80G:1
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
