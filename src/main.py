@@ -38,10 +38,12 @@ parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the 
 parser.add_argument("--kappa", type=int, default=10, help="screening parameter (in unit of 1/L) in Ewald summation")
 
 # MCMC.
-parser.add_argument("--mc_therm", type=int, default=10, help="MCMC thermalization steps")
+parser.add_argument("--mc_therm", type=int, default=100, help="MCMC thermalization steps")
 parser.add_argument("--mc_steps", type=int, default=50, help="MCMC update steps")
-parser.add_argument("--mc_width_proton", type=float, default=0.01, help="standard deviation of the Gaussian proposal in MCMC update")
-parser.add_argument("--mc_width_electron", type=float, default=0.05, help="standard deviation of the Gaussian proposal in MCMC update")
+parser.add_argument("--mc_proton_width", type=float, default=0.01, help="standard deviation of the Gaussian proposal in MCMC update")
+parser.add_argument("--mc_electron_width", type=float, default=0.05, help="standard deviation of the Gaussian proposal in MCMC update")
+parser.add_argument("--mc_proton_force", type=bool, default=True, help="whether use force in proton sampling")
+parser.add_argument("--mc_electron_force", type=bool, default=False, help="whether use force in electron sampling")
 
 # technical miscellaneous
 parser.add_argument("--hutchinson", action='store_true',  help="use Hutchinson's trick to compute the laplacian")
@@ -115,7 +117,7 @@ print("#parameters in the flow model: %d" % raveled_params_flow.size)
 from sampler import make_flow, make_classical_score
 logprob_novmap = make_flow(network_flow, n, dim, L, beta, args.rs)
 logprob = jax.vmap(logprob_novmap, (None, 0), 0)
-grad_logprob = jax.vmap(jax.grad(logprob_novmap, argnums=1), (None, 0), 0)
+grad_logprob = jax.vmap(jax.grad(logprob_novmap, argnums=1), (None, 0), 0) 
 
 ####################################################################################
 
@@ -164,7 +166,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d_K_%d" % \
                       (args.steps, args.depth, args.spsize, args.tpsize, args.Nf, args.K) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
-                   + "_mctherm_%d_mcsteps_%d_mcp_%g_mce_%g" % (args.mc_therm, args.mc_steps, args.mc_width_proton, args.mc_width_electron) \
+                   + "_mctherm_%d_mcsteps_%d_mcp_%g_mce_%g" % (args.mc_therm, args.mc_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \
                    + ("_lr_%g_decay_%g_damping_%g_norm_%g" % (args.lr, args.decay, args.damping, args.max_norm) \
                         if args.sr else "_lr_%g" % args.lr) \
@@ -210,9 +212,9 @@ else:
     for i in range(args.mc_therm):
         print("---- thermal step %d ----" % (i+1))
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
-                                   logprob, grad_logprob, s, params_flow,
-                                   logpsi2, grad_logpsi2, x, params_wfn,
-                                   args.mc_steps, args.mc_width_proton, args.mc_width_electron, L, sp_indices)
+                                   logprob, grad_logprob if args.mc_proton_force else None, s, params_flow,
+                                   logpsi2, grad_logpsi2 if args.mc_electron_force else None, x, params_wfn,
+                                   args.mc_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
         print ('acc:', ar_s, ar_x)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
     print("x shape:", x.shape, "\t\ttype:", type(x))
@@ -286,9 +288,9 @@ for i in range(epoch_finished + 1, args.epoch + 1):
 
     for acc in range(args.acc_steps):
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
-                                               logprob, grad_logprob, s, params_flow,
-                                               logpsi2, grad_logpsi2, x, params_wfn,
-                                               args.mc_steps, args.mc_width_proton, args.mc_width_electron, L, sp_indices)
+                                               logprob, grad_logprob if args.mc_proton_force else None, s, params_flow,
+                                               logpsi2, grad_logpsi2 if args.mc_electron_force else None, x, params_wfn,
+                                               args.mc_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
         ar_s_acc += ar_s
         ar_x_acc += ar_x
 

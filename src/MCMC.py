@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from functools import partial
 
 @partial(jax.jit, static_argnums=(0, 1))
-def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_stddev=0.02):
+def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_width=0.02):
     """
         Markov Chain Monte Carlo sampling algorithm.
 
@@ -15,7 +15,7 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_stddev=0.02):
         x_init: initial value of x, with shape (batch, n, dim).
         key: initial PRNG key.
         mc_steps: total number of Monte Carlo steps.
-        mc_stddev: standard deviation of the Gaussian proposal.
+        mc_width: size of the Monte Carlo proposal.
 
     OUTPUT:
         x: resulting batch samples, with the same shape as `x_init`.
@@ -24,12 +24,12 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_stddev=0.02):
         x, logp, f, key, num_accepts = state
         key, key_proposal, key_accept = jax.random.split(key, 3)
         
-        x_proposal = x + f * mc_stddev + jnp.sqrt(mc_stddev) * jax.random.normal(key_proposal, x.shape)
+        x_proposal = x + f * mc_width + jnp.sqrt(mc_width) * jax.random.normal(key_proposal, x.shape)
         logp_proposal = logp_fn(x_proposal)
 
         if force_fn is not None:
             f_proposal = force_fn(x_proposal)
-            diff = jnp.sum(0.5*(f + f_proposal)*((x - x_proposal) + mc_stddev/4*(f - f_proposal)), axis=(1,2))
+            diff = jnp.sum(0.5*(f + f_proposal)*((x - x_proposal) + mc_width/4*(f - f_proposal)), axis=(1,2))
         else:
             f_proposal = jnp.zeros_like(x_proposal)
             diff = jnp.zeros_like(logp_proposal)

@@ -2,7 +2,7 @@ import subprocess
 import time 
 import re
 
-nickname = 'jastrow-tabc'
+nickname = 'jastrow-tabc-h2'
 
 ###############################
 nlist = [14]
@@ -12,10 +12,10 @@ Tlist = [1200]
 dim = 3
 
 Gmax = 15
-steps, depth = 1, 2
-h1size, h2size = 16, 16
+steps, depth = 1, 3
+h1size, h2size = 32, 16
 Nf = 5
-K = 1
+K = 4
 
 lr = 0.01
 decay = 1e-2
@@ -24,8 +24,8 @@ max_norm = 1e-3
 clip_factor = 5.0
 
 mc_steps = 100
-mc_width_proton = 0.0001
-mc_width_electron = 0.01
+mc_proton_width = 1e-5
+mc_electron_width = 1e-3
 
 batchsize, acc_steps = 1024, 1
 ###############################
@@ -61,7 +61,7 @@ echo "CUDA devices $CUDA_VISIBLE_DEVICES"\n'''
 
     job += '''
 echo Job started at `date`\n'''
-    job +='taskset -c 5 python '+ str(bin) + ' '
+    job +='taskset -c 4 python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
     job += '--sr' 
