@@ -38,7 +38,7 @@ parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the 
 parser.add_argument("--kappa", type=int, default=10, help="screening parameter (in unit of 1/L) in Ewald summation")
 
 # MCMC.
-parser.add_argument("--mc_therm", type=int, default=100, help="MCMC thermalization steps")
+parser.add_argument("--mc_therm", type=int, default=10, help="MCMC thermalization steps")
 parser.add_argument("--mc_proton_steps", type=int, default=50, help="MCMC update steps")
 
 parser.add_argument("--mc_electron_steps", type=int, default=50, help="MCMC update steps")

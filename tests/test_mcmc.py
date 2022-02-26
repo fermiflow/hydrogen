@@ -11,7 +11,7 @@ def test_mcmc():
     batchsize = 1024
 
     mc_steps = 100
-    mc_width = 1e-4
+    mc_width = 1e-2
     rs = 1.44
     L = (4/3*jnp.pi*n)**(1/3)
 
@@ -35,7 +35,7 @@ def test_mcmc():
         rij = (jnp.reshape(z, (n, 1, dim)) - jnp.reshape(z, (1, n, dim)))[i, j]
         r = jnp.linalg.norm(rij, axis=-1)
     
-        _f = _h2
+        _f = _soft 
         f_vmap = jax.vmap(_f)
         return -beta * jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
     
