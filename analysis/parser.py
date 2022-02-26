@@ -40,7 +40,7 @@ def natural_sort(l):
 
 if __name__=='__main__':
 
-    fname = '/data/wanglei/hydrogen/firsttry/n_38_dim_3_rs_1.5_T_1000_steps_1_depth_2_spsize_32_tpsize_16_Nf_5_Gmax_15_kappa_10_mctherm_10_mcsteps_50_mcstddev_0.05_lr_0.001_decay_0.01_damping_0.001_norm_0.001_clip_5_bs_1024_devices_4_accsteps_1/data.txt'
+    fname = '/data/wanglei/hydrogen/jastrow-tabc-soft/n_14_dim_3_rs_1.44_T_1200_steps_1_depth_3_spsize_32_tpsize_16_Nf_5_K_4_Gmax_15_kappa_10_mctherm_10_mcsteps_100_100_mcwidth_0.01_0.05_lr_0.01_decay_0.01_damping_0.001_norm_0.001_clip_5_bs_1024_devices_1_accsteps_1/data.txt'
     r = parse_filename(fname)
 
     print (r)

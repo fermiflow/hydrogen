@@ -2,11 +2,11 @@ import subprocess
 import time 
 import re
 
-nickname = 'jastrow-tabc-h2'
+nickname = 'jastrow-tabc-soft'
 
 ###############################
 nlist = [14]
-rslist = [1.44]
+rslist = [1.34]
 Tlist = [1200]
 
 dim = 3
@@ -23,9 +23,11 @@ damping = 1e-3
 max_norm = 1e-3
 clip_factor = 5.0
 
-mc_steps = 100
-mc_proton_width = 1e-5
-mc_electron_width = 1e-3
+mc_proton_steps = 100
+mc_electron_steps = 100
+
+mc_proton_width = 0.01
+mc_electron_width = 0.05
 
 batchsize, acc_steps = 1024, 1
 ###############################
@@ -36,8 +38,8 @@ def submitJob(bin,args,jobname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=a100
-#SBATCH --gres=gpu:A100_80G:1
+#SBATCH --partition=v100
+#SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
@@ -61,7 +63,7 @@ echo "CUDA devices $CUDA_VISIBLE_DEVICES"\n'''
 
     job += '''
 echo Job started at `date`\n'''
-    job +='taskset -c 4 python '+ str(bin) + ' '
+    job +='python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
     job += '--sr' 
