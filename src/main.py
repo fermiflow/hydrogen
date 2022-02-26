@@ -39,10 +39,13 @@ parser.add_argument("--kappa", type=int, default=10, help="screening parameter (
 
 # MCMC.
 parser.add_argument("--mc_therm", type=int, default=100, help="MCMC thermalization steps")
-parser.add_argument("--mc_steps", type=int, default=50, help="MCMC update steps")
+parser.add_argument("--mc_proton_steps", type=int, default=50, help="MCMC update steps")
+
+parser.add_argument("--mc_electron_steps", type=int, default=50, help="MCMC update steps")
+
 parser.add_argument("--mc_proton_width", type=float, default=0.01, help="standard deviation of the Gaussian proposal in MCMC update")
 parser.add_argument("--mc_electron_width", type=float, default=0.05, help="standard deviation of the Gaussian proposal in MCMC update")
-parser.add_argument("--mc_proton_force", type=bool, default=True, help="whether use force in proton sampling")
+parser.add_argument("--mc_proton_force", type=bool, default=False, help="whether use force in proton sampling")
 parser.add_argument("--mc_electron_force", type=bool, default=False, help="whether use force in electron sampling")
 
 # technical miscellaneous
@@ -166,7 +169,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d_K_%d" % \
                       (args.steps, args.depth, args.spsize, args.tpsize, args.Nf, args.K) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
-                   + "_mctherm_%d_mcsteps_%d_mcp_%g_mce_%g" % (args.mc_therm, args.mc_steps, args.mc_proton_width, args.mc_electron_width) \
+                   + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \
                    + ("_lr_%g_decay_%g_damping_%g_norm_%g" % (args.lr, args.decay, args.damping, args.max_norm) \
                         if args.sr else "_lr_%g" % args.lr) \
@@ -214,7 +217,7 @@ else:
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                    logprob, grad_logprob if args.mc_proton_force else None, s, params_flow,
                                    logpsi2, grad_logpsi2 if args.mc_electron_force else None, x, params_wfn,
-                                   args.mc_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
+                                   args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
         print ('acc:', ar_s, ar_x)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
     print("x shape:", x.shape, "\t\ttype:", type(x))
@@ -290,7 +293,7 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                                logprob, grad_logprob if args.mc_proton_force else None, s, params_flow,
                                                logpsi2, grad_logpsi2 if args.mc_electron_force else None, x, params_wfn,
-                                               args.mc_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
+                                               args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
         ar_s_acc += ar_s
         ar_x_acc += ar_x
 

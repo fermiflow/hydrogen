@@ -24,12 +24,12 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_width=0.02):
         x, logp, f, key, num_accepts = state
         key, key_proposal, key_accept = jax.random.split(key, 3)
         
-        x_proposal = x + f * mc_width + jnp.sqrt(mc_width) * jax.random.normal(key_proposal, x.shape)
+        x_proposal = x + f * mc_width**2 + mc_width * jax.random.normal(key_proposal, x.shape)
         logp_proposal = logp_fn(x_proposal)
 
         if force_fn is not None:
             f_proposal = force_fn(x_proposal)
-            diff = jnp.sum(0.5*(f + f_proposal)*((x - x_proposal) + mc_width/4*(f - f_proposal)), axis=(1,2))
+            diff = jnp.sum(0.5*(f + f_proposal)*((x - x_proposal) + mc_width**2/4*(f - f_proposal)), axis=(1,2))
         else:
             f_proposal = jnp.zeros_like(x_proposal)
             diff = jnp.zeros_like(logp_proposal)

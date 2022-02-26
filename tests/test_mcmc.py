@@ -5,12 +5,13 @@ from utils import shard
 
 def test_mcmc():
     beta = 157888.088922572/1500
+    print ('beta', beta)
     n = 14 
     dim = 3
     batchsize = 1024
 
     mc_steps = 100
-    mc_stddev = 1e-6
+    mc_width = 1e-4
     rs = 1.44
     L = (4/3*jnp.pi*n)**(1/3)
 
@@ -63,14 +64,14 @@ def test_mcmc():
     
     mcmc_p = jax.pmap(mcmc, axis_name="p", in_axes=(None, None, 0, 0, None, None), static_broadcasted_argnums=(0, 1))
 
-    s, acc_rate = mcmc_p(logprob, force, s, keys, mc_steps, mc_stddev) 
+    s, acc_rate = mcmc_p(logprob, force, s, keys, mc_steps, mc_width) 
     s -= L * jnp.floor(s/L)
     r_mean = jnp.mean(jax.vmap(mean_dist)(s.reshape(batchsize, n, dim)))
-    print (acc_rate, r_mean)
+    print (acc_rate, r_mean, logprob(s.reshape(batchsize, n, dim)).mean())
 
-    s, acc_rate = mcmc_p(logprob, None, s, keys, mc_steps, mc_stddev) 
+    s, acc_rate = mcmc_p(logprob, None, s, keys, mc_steps, mc_width) 
     s -= L * jnp.floor(s/L)
     r_mean = jnp.mean(jax.vmap(mean_dist)(s.reshape(batchsize, n, dim)))
-    print (acc_rate, r_mean)
+    print (acc_rate, r_mean, logprob(s.reshape(batchsize, n, dim)).mean())
 
 test_mcmc()

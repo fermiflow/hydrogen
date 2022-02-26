@@ -9,12 +9,13 @@ from MCMC import mcmc
                    in_axes=(0, 
                             None, None, 0, 0, 
                             None, None, 0, 0, 
-                            None, None, None, None, None),
+                            None, None, None, None, None, None),
                    static_broadcasted_argnums=(1, 2, 5, 6))
 def sample_s_and_x(key,
                        logprob, grad_logprob, s, params_flow,
                        logpsi2, grad_logpsi2, x, params_wfn,
-                       mc_steps, mc_width_proton, mc_width_electron, L, sp_indices):
+                       mc_proton_steps, mc_electron_steps,
+                       mc_proton_width, mc_electron_width, L, sp_indices):
     """
         Generate new proton samples of shape (batch, n, dim), as well as coordinate sample
     of shape (batch, n, dim), from the sample of last optimization step.
@@ -29,14 +30,14 @@ def sample_s_and_x(key,
     # proton move
     s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), 
                               None if grad_logprob is None else lambda s: grad_logprob(params_flow, s), 
-                              s, key_proton, mc_steps, mc_width_proton)
+                              s, key_proton, mc_proton_steps, mc_proton_width)
     s -= L * jnp.floor(s/L)
     
     # electron move
     ks = jnp.concatenate([k,s], axis=1)
     x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, ks), 
                                 None if grad_logpsi2 is None else lambda x: grad_logpsi2(x, params_wfn, ks), 
-                                x, key_electron, mc_steps, mc_width_electron)
+                                x, key_electron, mc_electron_steps, mc_electron_width)
     x -= L * jnp.floor(x/L)
 
     return key, ks, s, x, proton_acc_rate, electron_acc_rate
