@@ -3,17 +3,17 @@ import jax.numpy as jnp
 
 from functools import partial
 
-from MCMC import mcmc
+from mcmc import mcmc
 
 @partial(jax.pmap, axis_name="p",
                    in_axes=(0, 
-                            None, None, 0, 0, 
-                            None, None, 0, 0, 
+                            None, 0, 0, 
+                            None, 0, 0, 
                             None, None, None, None, None, None),
-                   static_broadcasted_argnums=(1, 2, 5, 6))
+                   static_broadcasted_argnums=(1, 4))
 def sample_s_and_x(key,
-                       logprob, grad_logprob, s, params_flow,
-                       logpsi2, grad_logpsi2, x, params_wfn,
+                       logprob, s, params_flow,
+                       logpsi2, x, params_wfn,
                        mc_proton_steps, mc_electron_steps,
                        mc_proton_width, mc_electron_width, L, sp_indices):
     """
@@ -29,14 +29,12 @@ def sample_s_and_x(key,
 
     # proton move
     s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), 
-                              None if grad_logprob is None else lambda s: grad_logprob(params_flow, s), 
                               s, key_proton, mc_proton_steps, mc_proton_width)
     s -= L * jnp.floor(s/L)
     
     # electron move
     ks = jnp.concatenate([k,s], axis=1)
     x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, ks), 
-                                None if grad_logpsi2 is None else lambda x: grad_logpsi2(x, params_wfn, ks), 
                                 x, key_electron, mc_electron_steps, mc_electron_width)
     x -= L * jnp.floor(x/L)
 

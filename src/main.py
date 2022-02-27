@@ -7,6 +7,7 @@ import os
 import time
 
 import checkpoint
+from vmc import sample_s_and_x, make_loss
 
 print("jax.__version__:", jax.__version__)
 key = jax.random.PRNGKey(42)
@@ -45,8 +46,6 @@ parser.add_argument("--mc_electron_steps", type=int, default=50, help="MCMC upda
 
 parser.add_argument("--mc_proton_width", type=float, default=0.01, help="standard deviation of the Gaussian proposal in MCMC update")
 parser.add_argument("--mc_electron_width", type=float, default=0.05, help="standard deviation of the Gaussian proposal in MCMC update")
-parser.add_argument("--mc_proton_force", type=bool, default=False, help="whether use force in proton sampling")
-parser.add_argument("--mc_electron_force", type=bool, default=False, help="whether use force in electron sampling")
 
 # technical miscellaneous
 parser.add_argument("--hutchinson", action='store_true',  help="use Hutchinson's trick to compute the laplacian")
@@ -120,7 +119,6 @@ print("#parameters in the flow model: %d" % raveled_params_flow.size)
 from sampler import make_flow, make_classical_score
 logprob_novmap = make_flow(network_flow, n, dim, L, beta, args.rs)
 logprob = jax.vmap(logprob_novmap, (None, 0), 0)
-grad_logprob = jax.vmap(jax.grad(logprob_novmap, argnums=1), (None, 0), 0) 
 
 ####################################################################################
 
@@ -140,7 +138,7 @@ print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, \
                    make_logpsi2, make_quantum_score
 logpsi_novmap = make_logpsi(network_wfn, L, args.rs)
-logpsi2, grad_logpsi2 = make_logpsi2(logpsi_novmap)
+logpsi2 = make_logpsi2(logpsi_novmap)
 
 ####################################################################################
 
@@ -182,8 +180,6 @@ if not os.path.isdir(path):
 
 ckpt_filename, epoch_finished = checkpoint.find_ckpt_filename(args.restore_path or path)
 
-from VMC import sample_s_and_x
-
 if ckpt_filename is not None:
     print("Load checkpoint file: %s, epoch finished: %g" %(ckpt_filename, epoch_finished))
     ckpt = checkpoint.load_data(ckpt_filename)
@@ -215,10 +211,10 @@ else:
     for i in range(args.mc_therm):
         print("---- thermal step %d ----" % (i+1))
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
-                                   logprob, grad_logprob if args.mc_proton_force else None, s, params_flow,
-                                   logpsi2, grad_logpsi2 if args.mc_electron_force else None, x, params_wfn,
+                                   logprob, s, params_flow,
+                                   logpsi2, x, params_wfn,
                                    args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
-        print ('acc:', ar_s, ar_x)
+        print ('acc:', jnp.mean(ar_s), jnp.mean(ar_x))
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
     print("x shape:", x.shape, "\t\ttype:", type(x))
 
@@ -229,7 +225,6 @@ print("\n========== Training ==========")
 logpsi, logpsi_grad_laplacian = \
         make_logpsi_grad_laplacian(logpsi_novmap, hutchinson=args.hutchinson)
 
-from VMC import make_loss
 observable_and_lossfn = make_loss(logprob, logpsi, logpsi_grad_laplacian,
                                   args.kappa, G, L, args.rs, Vconst, beta, args.clip_factor)
 
@@ -291,8 +286,8 @@ for i in range(epoch_finished + 1, args.epoch + 1):
 
     for acc in range(args.acc_steps):
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
-                                               logprob, grad_logprob if args.mc_proton_force else None, s, params_flow,
-                                               logpsi2, grad_logpsi2 if args.mc_electron_force else None, x, params_wfn,
+                                               logprob, s, params_flow,
+                                               logpsi2, x, params_wfn,
                                                args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
         ar_s_acc += ar_s
         ar_x_acc += ar_x
