@@ -2,49 +2,49 @@ import subprocess
 import time 
 import re
 
-nickname = 'jastrow-tabc-soft'
+nickname = 'jastrow-tabc-h2'
 
 ###############################
-nlist = [14]
-rslist = [1.34]
-Tlist = [1200]
+nlist = [54]
+rslist = [1.2]
+Tlist = [10000]
 
 dim = 3
 
 Gmax = 15
-steps, depth = 1, 3
-h1size, h2size = 32, 16
-Nf = 5
-K = 4
 
-lr = 0.01
+flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 64, 16
+wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
+Nf, K = 5, 4
+
+lr = 0.05
 decay = 1e-2
 damping = 1e-3
 max_norm = 1e-3
 clip_factor = 5.0
 
-mc_proton_steps = 100
+mc_proton_steps = 1000
 mc_electron_steps = 100
 
-mc_proton_width = 0.01
-mc_electron_width = 0.05
+mc_proton_width = 0.003
+mc_electron_width = 0.03
 
-batchsize, acc_steps = 1024, 1
+batchsize, acc_steps = 128, 8
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
 
-def submitJob(bin,args,jobname,run=False,wait=None):
+def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=v100
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:8
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
-#SBATCH --error=%s'''%(jobname,jobname+'.log',jobname+'.log')
+#SBATCH --error=%s'''%(jobname,logname,logname)
 
     if wait is not None:
         dependency ='''

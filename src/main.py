@@ -27,10 +27,15 @@ parser.add_argument("--rs", type=float, default=1.4, help="rs")
 parser.add_argument("--T", type=float, default=1000.0, help="temperature in  Kelvin")
 
 # normalizing flow.
-parser.add_argument("--steps", type=int, default=2, help="FermiNet: transformation steps")
-parser.add_argument("--depth", type=int, default=2, help="FermiNet: network depth")
-parser.add_argument("--spsize", type=int, default=16, help="FermiNet: single-particle feature size")
-parser.add_argument("--tpsize", type=int, default=16, help="FermiNet: two-particle feature size")
+parser.add_argument("--flow_steps", type=int, default=2, help="FermiNet: transformation steps")
+parser.add_argument("--flow_depth", type=int, default=2, help="FermiNet: network depth")
+parser.add_argument("--flow_h1size", type=int, default=16, help="FermiNet: single-particle feature size")
+parser.add_argument("--flow_h2size", type=int, default=16, help="FermiNet: two-particle feature size")
+
+parser.add_argument("--wfn_depth", type=int, default=2, help="FermiNet: network depth")
+parser.add_argument("--wfn_h1size", type=int, default=16, help="FermiNet: single-particle feature size")
+parser.add_argument("--wfn_h2size", type=int, default=16, help="FermiNet: two-particle feature size")
+
 parser.add_argument("--Nf", type=int, default=5, help="FermiNet: number of fequencies")
 parser.add_argument("--K", type=int, default=4, help="FermiNet: number of dets")
 
@@ -39,7 +44,7 @@ parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the 
 parser.add_argument("--kappa", type=int, default=10, help="screening parameter (in unit of 1/L) in Ewald summation")
 
 # MCMC.
-parser.add_argument("--mc_therm", type=int, default=10, help="MCMC thermalization steps")
+parser.add_argument("--mc_therm", type=int, default=50, help="MCMC thermalization steps")
 parser.add_argument("--mc_proton_steps", type=int, default=50, help="MCMC update steps")
 
 parser.add_argument("--mc_electron_steps", type=int, default=50, help="MCMC update steps")
@@ -105,8 +110,8 @@ print("\n========== Initialize normalizing flow ==========")
 import haiku as hk
 from ferminet import FermiNet
 def forward_fn(x):
-    for _ in range(args.steps):
-        model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, 0)
+    for _ in range(args.flow_steps):
+        model = FermiNet(args.flow_depth, args.flow_h1size, args.flow_h2size, args.Nf, L, 0)
         x = model(x)
     return x
 network_flow = hk.transform(forward_fn)
@@ -125,7 +130,7 @@ logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 print("\n========== Initialize wavefunction ==========")
 
 def forward_fn(x, k):
-    model = FermiNet(args.depth, args.spsize, args.tpsize, args.Nf, L, args.K, rs=args.rs)
+    model = FermiNet(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K, rs=args.rs)
     return model(x, k)
 network_wfn = hk.transform(forward_fn)
 sx_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
@@ -164,8 +169,10 @@ print("\n========== Checkpointing ==========")
 from utils import shard, replicate
 
 path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
-                   + "_steps_%d_depth_%d_spsize_%d_tpsize_%d_Nf_%d_K_%d" % \
-                      (args.steps, args.depth, args.spsize, args.tpsize, args.Nf, args.K) \
+                   + "_fs_%d_fd_%d_fh1_%d_fh2_%d" % \
+                      (args.flow_steps, args.flow_depth, args.flow_h1size, args.flow_h2size) \
+                   + "_wd_%d_wh1_%d_wh2_%d_Nf_%d_K_%d" % \
+                      (args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, args.K) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \

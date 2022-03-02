@@ -5,18 +5,18 @@ from mcmc import mcmc
 from utils import shard 
 
 def test_mcmc():
-    beta = 157888.088922572/1500
+    beta = 157888.088922572/10000
     print ('beta', beta)
-    n = 14 
+    n = 54
     dim = 3
     batchsize = 1024
-
-    mc_steps = 100
-    mc_width = 1e-2
-    rs = 1.44
+    
+    mc_therm = 50
+    mc_steps = 1000
+    mc_width = 0.003
+    rs = 1.2
     L = (4/3*jnp.pi*n)**(1/3)
 
-    
     def mean_dist(z):
         z = z - L * jnp.floor(z/L)
         i, j = jnp.triu_indices(n, k=1)
@@ -41,10 +41,11 @@ def test_mcmc():
     s, keys = shard(s), shard(keys)
     
     mcmc_p = jax.pmap(mcmc, axis_name="p", in_axes=(None, 0, 0, None, None), static_broadcasted_argnums=(0,))
-
-    s, acc_rate = mcmc_p(logprob, s, keys, mc_steps, mc_width) 
-    s -= L * jnp.floor(s/L)
-    r_mean = jnp.mean(jax.vmap(mean_dist)(s.reshape(batchsize, n, dim)))
-    print (acc_rate, r_mean, logprob(s.reshape(batchsize, n, dim)).mean())
+    
+    for i in range(mc_therm):
+        s, acc_rate = mcmc_p(logprob, s, keys, mc_steps, mc_width) 
+        s -= L * jnp.floor(s/L)
+        r_mean = jnp.mean(jax.vmap(mean_dist)(s.reshape(batchsize, n, dim)))
+        print (i, acc_rate, r_mean, -logprob(s.reshape(batchsize, n, dim)).mean()/n)
 
 test_mcmc()

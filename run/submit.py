@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys 
+import sys , os 
 
 if __name__=='__main__':
     import argparse
@@ -42,10 +42,13 @@ if __name__=='__main__':
                         'n':n, 
                         'Gmax':Gmax, 
                         'dim': dim, 
-                        'steps': steps,
-                        'depth': depth, 
-                        'spsize': h1size,
-                        'tpsize': h2size,
+                        'flow_steps': flow_steps,
+                        'flow_depth': flow_depth, 
+                        'flow_h1size': flow_h1size,
+                        'flow_h2size': flow_h2size,
+                        'wfn_depth': wfn_depth, 
+                        'wfn_h1size': wfn_h1size,
+                        'wfn_h2size': wfn_h2size,
                         'Nf': Nf, 
                         'K': K,
                         'folder':resfolder,
@@ -61,10 +64,15 @@ if __name__=='__main__':
                         'clip_factor': clip_factor,
                         'acc_steps': acc_steps,
                         }
-                jobname = jobdir
+                logname = jobdir
                 for key, val in args.items():
                     if key != 'folder':
-                        jobname +=  str(key) + str(val) + '_'
-                jobname = jobname[:-1] 
+                        k = str(key)
+                        if '_' in k:
+                            k = ''.join([s[0] for s in k.split('_')])
+                        logname +=  k + str(val) + '_'
+                logname = logname[:-1] + '.log'
 
-                jobid = submitJob(prog,args,jobname,run=input.run, wait=input.waitfor)
+                jobname = os.path.basename(os.path.dirname(logname))
+
+                jobid = submitJob(prog,args,jobname,logname,run=input.run, wait=input.waitfor)

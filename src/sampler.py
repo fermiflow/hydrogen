@@ -26,9 +26,9 @@ def make_base(n, dim, L, beta, rs):
         #r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rij/L), axis=-1)*(L/(2*jnp.pi))
         r = jnp.linalg.norm(rij, axis=-1)
     
-        _f = _soft
+        _f = _h2
         f_vmap = jax.vmap(_f)
-        return -beta * jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
+        return -(beta/rs**2)*jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
         
     return logprob
 
