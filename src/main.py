@@ -221,7 +221,7 @@ else:
                                    logprob, s, params_flow,
                                    logpsi2, x, params_wfn,
                                    args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
-        print ('acc:', jnp.mean(ar_s), jnp.mean(ar_x))
+        print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
     print("x shape:", x.shape, "\t\ttype:", type(x))
 

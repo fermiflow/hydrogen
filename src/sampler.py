@@ -28,7 +28,7 @@ def make_base(n, dim, L, beta, rs):
     
         _f = _h2
         f_vmap = jax.vmap(_f)
-        return -(beta/rs**2)*jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
+        return -beta*jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
         
     return logprob
 
