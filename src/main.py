@@ -208,7 +208,12 @@ else:
 
     key, key_proton, key_electron = jax.random.split(key, 3)
 
-    s = jax.random.uniform(key_proton, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
+    #s = jax.random.uniform(key_proton, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
+    from utils import cubic_init
+    s = cubic_init(n, 1.4/args.rs) # (n, dim)
+    s = s[None, None, :, :] + 0.1*jax.random.normal(key_proton, (num_devices, batch_per_device, n, dim)) 
+    s -= L * jnp.floor(s/L)
+
     x = jax.random.uniform(key_electron, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
 
     keys = jax.random.split(key, num_devices)

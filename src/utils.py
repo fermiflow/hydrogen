@@ -2,6 +2,8 @@ import jax
 import jax.numpy as jnp
 import functools
 from typing import Sequence, Optional 
+import math
+import itertools
 
 shard = jax.pmap(lambda x: x)
 
@@ -51,3 +53,9 @@ def logdet_matmul(xs: Sequence[jnp.ndarray],
   sign_out = result/jnp.abs(result)
   log_out = jnp.log(jnp.abs(result)) + maxlogdet
   return sign_out, log_out
+
+def cubic_init(n,spacing):
+    K = math.ceil(n**(1 / 3))
+    x = jnp.linspace(0, K*spacing, K, endpoint=False)
+    position = list(itertools.product(x, repeat=3))
+    return jnp.array(position[:n])

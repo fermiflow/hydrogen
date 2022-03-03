@@ -9,6 +9,9 @@ def make_base(n, dim, L, beta, rs):
         sigma = 1.4/rs/(2**(1/6))          # h2 bond length = 1.4 au = 2**(1/6)*sigma
         return 4*epsilon*((sigma/r)**12 - (sigma/r)**6)
 
+    def _yukawa(r):
+        return jnp.exp(-rs*r)/(rs*r)
+
     def _soft(r):
         return jnp.exp(-rs*r)
 
@@ -19,10 +22,11 @@ def make_base(n, dim, L, beta, rs):
     
     def logprob(z):
         rc = L/2
-
-        z = z - L * jnp.floor(z/L)
+        
         i, j = jnp.triu_indices(n, k=1)
         rij = (jnp.reshape(z, (n, 1, dim)) - jnp.reshape(z, (1, n, dim)))[i, j]
+        rij = rij - L * jnp.floor(rij/L)
+
         #r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rij/L), axis=-1)*(L/(2*jnp.pi))
         r = jnp.linalg.norm(rij, axis=-1)
     
