@@ -8,6 +8,8 @@ def test_sampler():
     Nf = 5
     spsize, tpsize = 16, 16
     L = 1.234
+    beta = 10.0 
+    rs = 1.4 
     
     def flow_fn(x):
         net = FermiNet(depth, spsize, tpsize, Nf, L, 0)
@@ -19,11 +21,9 @@ def test_sampler():
     x = jnp.array( np.random.uniform(0., L, (n, dim)) )
     params = model.init(key, x)
 
-    logprob = make_flow(model, n, dim, L)
+    logprob = make_flow(model, n, dim, L, beta, rs)
 
     logp_scan = logprob(params, x, True)
     logp_no_scan = logprob(params, x, False)
 
     assert jnp.allclose(logp_scan, logp_no_scan)
-
-test_sampler()

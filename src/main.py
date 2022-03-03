@@ -44,7 +44,7 @@ parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the 
 parser.add_argument("--kappa", type=int, default=10, help="screening parameter (in unit of 1/L) in Ewald summation")
 
 # MCMC.
-parser.add_argument("--mc_therm", type=int, default=50, help="MCMC thermalization steps")
+parser.add_argument("--mc_therm", type=int, default=10, help="MCMC thermalization steps")
 parser.add_argument("--mc_proton_steps", type=int, default=50, help="MCMC update steps")
 
 parser.add_argument("--mc_electron_steps", type=int, default=50, help="MCMC update steps")
@@ -208,11 +208,11 @@ else:
 
     key, key_proton, key_electron = jax.random.split(key, 3)
 
-    #s = jax.random.uniform(key_proton, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
-    from utils import cubic_init
-    s = cubic_init(n, 1.4/args.rs) # (n, dim)
-    s = s[None, None, :, :] + 0.1*jax.random.normal(key_proton, (num_devices, batch_per_device, n, dim)) 
-    s -= L * jnp.floor(s/L)
+    s = jax.random.uniform(key_proton, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
+    #from utils import cubic_init
+    #s = cubic_init(n, 1.4/args.rs) # (n, dim)
+    #s = s[None, None, :, :] + 0.1*jax.random.normal(key_proton, (num_devices, batch_per_device, n, dim)) 
+    #s -= L * jnp.floor(s/L)
 
     x = jax.random.uniform(key_electron, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
 

@@ -25,12 +25,12 @@ def make_base(n, dim, L, beta, rs):
         
         i, j = jnp.triu_indices(n, k=1)
         rij = (jnp.reshape(z, (n, 1, dim)) - jnp.reshape(z, (1, n, dim)))[i, j]
-        rij = rij - L * jnp.floor(rij/L)
+        rij = rij - L * jnp.rint(rij/L)
 
         #r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rij/L), axis=-1)*(L/(2*jnp.pi))
         r = jnp.linalg.norm(rij, axis=-1)
-    
-        _f = _h2
+
+        _f = _yukawa
         f_vmap = jax.vmap(_f)
         return -beta*jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
         
