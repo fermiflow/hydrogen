@@ -64,11 +64,20 @@ parser.add_argument("--max_norm", type=float, default=1e-3, help="gradnorm maxim
 parser.add_argument("--clip_factor", type=float, default=5.0, help="clip factor for gradient")
 
 # training parameters.
-parser.add_argument("--batch", type=int, default=2048, help="batch size (per single gradient accumulation step)")
+parser.add_argument("--walkersize", type=int, default=16, help="walker size for protons")
+parser.add_argument("--batchsize", type=int, default=2048, help="batch size (per single gradient accumulation step)")
 parser.add_argument("--acc_steps", type=int, default=4, help="gradient accumulation steps")
 parser.add_argument("--epoch", type=int, default=100000, help="final epoch")
 
 args = parser.parse_args()
+
+if args.batchsize % args.walkersize != 0:
+    raise ValueError("Batch size must be divisible by walkersize. "
+                     "Got batch = %d for %d walkers now." % (args.batchsize, args.walkersize))
+
+if args.walkersize % num_devices != 0:
+    raise ValueError("Batch size must be divisible by the number of GPU devices. "
+                         "Got batch = %d for %d devices now." % (args.walkersize, num_devices))
 
 n, dim = args.n, args.dim
 # Ry = 157888.088922572 Kelvin
@@ -179,7 +188,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + ("_lr_%g_decay_%g_damping_%g_norm_%g" % (args.lr, args.decay, args.damping, args.max_norm) \
                         if args.sr else "_lr_%g" % args.lr) \
                    + "_clip_%g"%(args.clip_factor) \
-                   + "_bs_%d_devices_%d_accsteps_%d" % (args.batch, num_devices, args.acc_steps)
+                   + "_ws_%d_bs_%d_devices_%d_accsteps_%d" % (args.walkersize, args.batchsize, num_devices, args.acc_steps)
 
 if not os.path.isdir(path):
     os.makedirs(path)
@@ -201,14 +210,12 @@ else:
 
     print("Initialize key and coordinate samples...")
 
-    if args.batch % num_devices != 0:
-        raise ValueError("Batch size must be divisible by the number of GPU devices. "
-                         "Got batch = %d for %d devices now." % (args.batch, num_devices))
-    batch_per_device = args.batch // num_devices
+    walker_per_device = args.walkersize // num_devices
+    batch_per_device = args.batchsize // num_devices
 
     key, key_proton, key_electron = jax.random.split(key, 3)
 
-    s = jax.random.uniform(key_proton, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
+    s = jax.random.uniform(key_proton, (num_devices, walker_per_device, n, dim), minval=0., maxval=L)
     #from utils import cubic_init
     #s = cubic_init(n, 1.4/args.rs) # (n, dim)
     #s = s[None, None, :, :] + 0.1*jax.random.normal(key_proton, (num_devices, batch_per_device, n, dim)) 
@@ -330,14 +337,14 @@ for i in range(epoch_finished + 1, args.epoch + 1):
             data["F"], data["F2"], \
             data["S"], data["S2"]
 
-    K_std = jnp.sqrt((K2- K**2) / (args.batch*args.acc_steps))
-    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (args.batch*args.acc_steps))
-    Vep_std = jnp.sqrt((Vep2- Vep**2) / (args.batch*args.acc_steps))
-    Vee_std = jnp.sqrt((Vee2- Vee**2) / (args.batch*args.acc_steps))
-    P_std = jnp.sqrt((P2- P**2) / (args.batch*args.acc_steps))
-    E_std = jnp.sqrt((E2- E**2) / (args.batch*args.acc_steps))
-    F_std = jnp.sqrt((F2- F**2) / (args.batch*args.acc_steps))
-    S_std = jnp.sqrt((S2- S**2) / (args.batch*args.acc_steps))
+    K_std = jnp.sqrt((K2- K**2) / (args.batchsize*args.acc_steps))
+    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (args.batchsize*args.acc_steps))
+    Vep_std = jnp.sqrt((Vep2- Vep**2) / (args.batchsize*args.acc_steps))
+    Vee_std = jnp.sqrt((Vee2- Vee**2) / (args.batchsize*args.acc_steps))
+    P_std = jnp.sqrt((P2- P**2) / (args.batchsize*args.acc_steps))
+    E_std = jnp.sqrt((E2- E**2) / (args.batchsize*args.acc_steps))
+    F_std = jnp.sqrt((F2- F**2) / (args.batchsize*args.acc_steps))
+    S_std = jnp.sqrt((S2- S**2) / (args.batchsize*args.acc_steps))
 
     # Note the quantities with energy dimension has a prefactor 1/rs^2
     print("iter: %04d" % i,

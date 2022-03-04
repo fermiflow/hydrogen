@@ -2,7 +2,7 @@ import subprocess
 import time 
 import re
 
-nickname = 'jastrow-tabc-rint-yukawa'
+nickname = 'walker'
 
 ###############################
 nlist = [14]
@@ -10,7 +10,6 @@ rslist = [1.2]
 Tlist = [10000]
 
 dim = 3
-
 Gmax = 15
 
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 64, 16
@@ -29,7 +28,8 @@ mc_electron_steps = 100
 mc_proton_width = 0.03
 mc_electron_width = 0.03
 
-batchsize, acc_steps = 1024, 1 
+walkersize = 128
+batchsize, acc_steps = 1024, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -38,7 +38,7 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=v100
+#SBATCH --partition=a100
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00

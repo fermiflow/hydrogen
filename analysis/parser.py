@@ -27,6 +27,8 @@ def parse_filename(f):
     decay = _parse(float, '_decay_([0-9]*\.?[0-9]*)', f)
     eta = _parse(float, '_damping_([0-9]*\.?[0-9]*)', f)
     maxnorm = _parse(float, 'norm_([0-9]*\.?[0-9]*)', f)
+
+    w = _parse(int, '_ws_([0-9]*)', f)
     b = _parse(int, '_bs_([0-9]*)', f)
 
     K = _parse(int, '_K_([0-9]*)', f)
@@ -34,7 +36,7 @@ def parse_filename(f):
 
     acc = _parse(int, '_accsteps_([0-9]*)', f)
 
-    return n, dim, rs, T, s, fd, fh1, fh2, wd, wh1, wh2, b, acc, lr, decay, eta, maxnorm, Nf, clip, K
+    return n, dim, rs, T, s, fd, fh1, fh2, wd, wh1, wh2, b, acc, lr, decay, eta, maxnorm, Nf, clip, K, w
 
 def natural_sort(l):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
@@ -44,7 +46,7 @@ def natural_sort(l):
 
 if __name__=='__main__':
 
-    fname = '/data/wanglei/hydrogen/jastrow-tabc-rint-h2/n_14_dim_3_rs_1.2_T_10000_fs_1_fd_3_fh1_64_fh2_16_wd_3_wh1_32_wh2_16_Nf_5_K_4_Gmax_15_kappa_10_mctherm_10_mcsteps_100_100_mcwidth_0.03_0.03_lr_0.05_decay_0.01_damping_0.001_norm_0.001_clip_5_bs_1024_devices_1_accsteps_1/data.txt'
+    fname = '/data/wanglei/hydrogen/walker/n_14_dim_3_rs_1.2_T_10000_fs_1_fd_3_fh1_64_fh2_16_wd_3_wh1_32_wh2_16_Nf_5_K_4_Gmax_15_kappa_10_mctherm_10_mcsteps_200_100_mcwidth_0.01_0.03_lr_0.05_decay_0.01_damping_0.001_norm_0.001_clip_5_ws_16_bs_512_devices_8_accsteps_1/data.txt'
     r = parse_filename(fname)
 
     print (r)

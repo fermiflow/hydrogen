@@ -17,13 +17,15 @@ def sample_s_and_x(key,
                        mc_proton_steps, mc_electron_steps,
                        mc_proton_width, mc_electron_width, L, sp_indices):
     """
-        Generate new proton samples of shape (batch, n, dim), as well as coordinate sample
-    of shape (batch, n, dim), from the sample of last optimization step.
+        Generate new proton samples of shape (walkersize, n, dim), as well as coordinate sample
+    of shape (batchsize, n, dim), from the sample of last optimization step.
     """
     key, key_momenta, key_proton, key_electron = jax.random.split(key, 4)
 
     # sample momenta 
-    batchsize, dim = s.shape[0], s.shape[2]
+    walkersize, dim = s.shape[0], s.shape[2]
+    batchsize = x.shape[0]
+
     twist = jax.random.uniform(key_momenta, (batchsize, dim), minval=-0.5, maxval=0.5)
     k = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) # (batchsize, n//2, dim)
 
@@ -33,7 +35,7 @@ def sample_s_and_x(key,
     s -= L * jnp.floor(s/L)
     
     # electron move
-    ks = jnp.concatenate([k,s], axis=1)
+    ks = jnp.concatenate([k, jnp.repeat(s, batchsize//walkersize, axis=0)], axis=1)
     x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, ks), 
                                 x, key_electron, mc_electron_steps, mc_electron_width)
     x -= L * jnp.floor(x/L)
@@ -47,19 +49,34 @@ from potential import potential_energy
 def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, beta, clip_factor):
 
     def observable_and_lossfn(params_flow, params_wfn, ks, s, x, key):
+        '''
+        s: (W, n, dim)
+        x: (B, n, dim)
+        '''
 
-        logp_states = logprob(params_flow, s)
+        walkersize, batchsize = s.shape[0], x.shape[0]
+        _repeat = lambda data: jnp.repeat(data, batchsize//walkersize, axis=0) # extend walkers to batchsize
+
+        logp_states = logprob(params_flow, s) # (W,)
+        logp_states = _repeat(logp_states)    # (B,)
+        print("logp.shape", logp_states.shape)
         grad, laplacian = logpsi_grad_laplacian(x, params_wfn, ks, key)
         print("grad.shape:", grad.shape)
         print("laplacian.shape:", laplacian.shape)
 
         kinetic = -laplacian - (grad**2).sum(axis=(-2, -1))
-        v_pp, v_ep, v_ee = potential_energy(jnp.concatenate([s, x], axis=1), kappa, G, L, rs) 
+
+        v_pp, v_ep, v_ee = potential_energy(jnp.concatenate([_repeat(s), x], axis=1), kappa, G, L, rs) 
         v_pp += Vconst
         v_ee += Vconst
         
-        Eloc = kinetic + (v_ep + v_ee)
-        Floc = logp_states *rs**2/ beta + Eloc.real + v_pp
+        Eloc = kinetic + (v_ep + v_ee) # (B, ) 
+        print("Eloc.shape", Eloc.shape)
+        Floc = logp_states*rs**2/ beta + Eloc.real + v_pp # (B,)
+        
+        # average over electron position for each proton walker 
+        Es = jax.lax.pmean(Eloc.reshape(walkersize, batchsize//walkersize).mean(axis=1), axis_name='p') # (W,)
+        Es = _repeat(Es) #(B,)
         
         #pressure in Gpa using viral theorem 
         # 1 Ry/Bohr^3 = 14710.513242194795 GPa 
@@ -89,7 +106,8 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
                       "S": S, "S2": S2}
 
         def classical_lossfn(params_flow):
-            logp_states = logprob(params_flow, s)
+            logp_states = logprob(params_flow, s) # (W,)
+            logp_states = _repeat(logp_states)    # (B,)
 
             tv = jax.lax.pmean(jnp.abs(Floc - F).mean(), axis_name="p")
             Floc_clipped = jnp.clip(Floc, F - clip_factor*tv, F + clip_factor*tv)
@@ -97,11 +115,11 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
             return gradF_phi
 
         def quantum_lossfn(params_wfn):
-            logpsix = logpsi(x, params_wfn, ks)
+            logpsix = logpsi(x, params_wfn, ks) # (B,)
 
-            tv = jax.lax.pmean(jnp.abs(Eloc - E).mean(), axis_name="p")
-            Eloc_clipped = jnp.clip(Eloc, E - clip_factor*tv, E + clip_factor*tv)
-            gradF_theta = 2 * (logpsix * (Eloc_clipped - E).conj()).real.mean()
+            tv = jax.lax.pmean(jnp.abs(Eloc - Es).mean(), axis_name="p")
+            Eloc_clipped = jnp.clip(Eloc, Es - clip_factor*tv, Es + clip_factor*tv)
+            gradF_theta = 2 * (logpsix * (Eloc_clipped - Es).conj()).real.mean()
             return gradF_theta
 
         return observable, classical_lossfn, quantum_lossfn
