@@ -133,10 +133,16 @@ def test_kinetic_energy():
     kinetic = -laplacian - (grad**2).sum(axis=(-2, -1))
 
     def kinetic_energy(x, s):
-        psi = lambda x: jnp.exp(logpsi(x, params, s)[0])
-        h = jax.hessian(psi)(x)
+        def psi_real(x):
+            log_real, log_imag = logpsi(x, params, s)
+            return jnp.real(jnp.exp(log_real + 1J * log_imag))
+        def psi_imag(x):
+            log_real, log_imag = logpsi(x, params, s)
+            return jnp.imag(jnp.exp(log_real + 1J * log_imag))
+
+        h = jax.hessian(psi_real)(x) + 1J * jax.hessian(psi_imag)(x)
         h = jnp.reshape(h, (n*dim, n*dim))
-        return -jnp.trace(h)/psi(x)
+        return -jnp.trace(h)/(psi_real(x) + 1J * psi_imag(x))
     kin = kinetic_energy(x, jnp.concatenate([k,s], axis=0))
 
     assert jnp.allclose(kinetic, kin)
@@ -192,4 +198,5 @@ def test_laplacian_hutchinson():
     print("batch:", batch)
     print("laplacian:", laplacian)
     print("laplacian hutchinson mean:", laplacian2_mean, "\tstd:", laplacian2_std)
+
 
