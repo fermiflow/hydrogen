@@ -338,13 +338,13 @@ for i in range(epoch_finished + 1, args.epoch + 1):
             data["S"], data["S2"]
 
     K_std = jnp.sqrt((K2- K**2) / (args.batchsize*args.acc_steps))
-    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (args.batchsize*args.acc_steps))
+    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (args.walkersize*args.acc_steps))
     Vep_std = jnp.sqrt((Vep2- Vep**2) / (args.batchsize*args.acc_steps))
     Vee_std = jnp.sqrt((Vee2- Vee**2) / (args.batchsize*args.acc_steps))
     P_std = jnp.sqrt((P2- P**2) / (args.batchsize*args.acc_steps))
     E_std = jnp.sqrt((E2- E**2) / (args.batchsize*args.acc_steps))
     F_std = jnp.sqrt((F2- F**2) / (args.batchsize*args.acc_steps))
-    S_std = jnp.sqrt((S2- S**2) / (args.batchsize*args.acc_steps))
+    S_std = jnp.sqrt((S2- S**2) / (args.walkersize*args.acc_steps))
 
     # Note the quantities with energy dimension has a prefactor 1/rs^2
     print("iter: %04d" % i,
