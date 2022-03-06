@@ -8,7 +8,7 @@ from jax.flatten_util import ravel_pytree
 
 from optax._src import base
 
-def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, alpha, decay, damping, max_norm):
+def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum_lr, decay, damping, max_norm):
     """
         Hybrid SR for both a classical probabilistic model and a set of
     quantum basis wavefunction ansatz.
@@ -57,7 +57,7 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, alpha, decay, damping
         classical_fisher += damping * jnp.eye(classical_fisher.shape[0])
         update_params_van_raveled = jax.scipy.linalg.solve(classical_fisher, grad_params_van_raveled)
 
-        lr = alpha/(1+decay*state['step'])
+        lr = classical_lr/(1+decay*state['step'])
         #scale gradient according to gradnorm
         gnorm_van = jnp.sum(grad_params_van_raveled * update_params_van_raveled) 
         gnorm_van = jax.lax.pmean(gnorm_van, axis_name="p")
@@ -66,7 +66,7 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, alpha, decay, damping
         update_params_van_raveled *= -scale
         update_params_van = params_van_unravel_fn(update_params_van_raveled)
 
-
+        lr = quantum_lr/(1+decay*state['step'])
         quantum_fisher += damping * jnp.eye(quantum_fisher.shape[0])
         update_params_flow_raveled = jax.scipy.linalg.solve(quantum_fisher, grad_params_flow_raveled)
         #scale gradient according to gradnorm

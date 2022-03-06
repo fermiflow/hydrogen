@@ -32,7 +32,7 @@ def make_base(n, dim, L, beta, rs):
 
         _f = _yukawa
         f_vmap = jax.vmap(_f)
-        return -beta*jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
+        return -jnp.sum(f_vmap(r) + f_vmap(2*rc-r) - 2*_f(rc)) 
         
     return logprob
 
