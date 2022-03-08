@@ -51,9 +51,12 @@ def test_logpsi():
     Pdn = np.random.permutation(n//2)
     P = np.concatenate([Pup, Pdn+n//2])
     logpsix_P = logpsi(x[P, :], params, jnp.concatenate([k,s[Ps, :]], axis=0))
-    print("logpsix:", logpsix)
-    print("logpsix_P:", logpsix_P)
-    assert jnp.allclose(logpsix_P[0], logpsix[0]) and jnp.allclose(logpsix_P[1], logpsix[1])
+
+    psix_P, psix = jnp.exp(logpsix_P[0] + 1j * logpsix_P[1]), \
+                   jnp.exp(logpsix[0] + 1j *logpsix[1])
+    print("psix:", psix)
+    print("psix_P:", psix_P)
+    assert jnp.allclose(psix_P, psix) or jnp.allclose(psix_P, -psix)
 
 def test_twist():
     depth, spsize, tpsize, Nf, L, K = 3, 16, 16, 5, 1.234, 8
@@ -198,5 +201,3 @@ def test_laplacian_hutchinson():
     print("batch:", batch)
     print("laplacian:", laplacian)
     print("laplacian hutchinson mean:", laplacian2_mean, "\tstd:", laplacian2_std)
-
-
