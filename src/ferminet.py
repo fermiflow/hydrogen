@@ -91,11 +91,17 @@ class FermiNet(hk.Module):
 
         if self.K > 0:
 
-            #jastrow
-            rmj = jnp.reshape(x[:n//2], (n//2, 1, dim)) - jnp.reshape(x[n//2:], (1, n//2, dim)) 
-            r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rmj/self.L), axis=-1)*(self.L/(2*jnp.pi))
+            #ep jastrow
+            rij = jnp.reshape(x[:n//2], (n//2, 1, dim)) - jnp.reshape(x[n//2:], (1, n//2, dim)) 
+            r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rij/self.L), axis=-1)*(self.L/(2*jnp.pi))
             alpha = hk.get_parameter("alpha", [self.K], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            log_jastrow = -jnp.sum(self.rs*r/(1+  jax.nn.softplus(alpha)[:, None, None] * r), axis=(1,2))
+            jastrow_ep = jnp.exp(-jnp.sum(self.rs*r/(1 + jax.nn.softplus(alpha)[:, None, None] * r), axis=(1,2)))
+
+            #ee jastrow for unlike spins
+            rij = jnp.reshape(x[n//2:n//2+n//4], (n//4, 1, dim)) - jnp.reshape(x[n//2+n//4:], (1, n//4, dim)) 
+            r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rij/self.L), axis=-1)*(self.L/(2*jnp.pi))
+            beta = hk.get_parameter("beta", [self.K], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            jastrow_ee = jnp.exp(jnp.sum(0.5*self.rs*r/(1 + jax.nn.softplus(beta)[:, None, None] * r), axis=(1,2)))
 
             #orbital
             w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
@@ -117,7 +123,7 @@ class FermiNet(hk.Module):
             f = f + jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)]) # here we use diagonal f to ensure continuous translation symm
             D = jnp.einsum("ai,ka,aj->kij", D_up, f, jnp.conjugate(D_dn))
         
-            phase, logabsdet = logdet_matmul([D*phi], log_jastrow)
+            phase, logabsdet = logdet_matmul([D*phi], jastrow_ep * jastrow_ee)
             
             return logabsdet + jnp.log(phase)  
         else:
