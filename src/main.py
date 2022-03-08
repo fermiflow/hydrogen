@@ -38,6 +38,7 @@ parser.add_argument("--wfn_h2size", type=int, default=16, help="FermiNet: two-pa
 
 parser.add_argument("--Nf", type=int, default=5, help="FermiNet: number of fequencies")
 parser.add_argument("--K", type=int, default=4, help="FermiNet: number of dets")
+parser.add_argument("--nk", type=int, default=19, help="FermiNet: number of plane wave basis")
 
 # parameters relevant to th Ewald summation of Coulomb interaction.
 parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the Ewald summation of Coulomb potential")
@@ -100,7 +101,7 @@ print("\n========== Initialize single-particle orbitals ==========")
 from orbitals import sp_orbitals
 sp_indices, Es = sp_orbitals(dim)
 sp_indices, Es = jnp.array(sp_indices), jnp.array(Es)
-sp_indices = sp_indices[:n//2]
+sp_indices = sp_indices[:args.nk]
 print("beta = %f, Ef = %d"% (beta, Es[n//2-1]))
 
 ####################################################################################
@@ -144,7 +145,7 @@ def forward_fn(x, k):
     return model(x, k)
 network_wfn = hk.transform(forward_fn)
 sx_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
-k_dummy = jax.random.uniform(key, (n//2, dim), minval=0, maxval=2*jnp.pi/L)
+k_dummy = jax.random.uniform(key, (2*args.nk, dim), minval=0, maxval=2*jnp.pi/L)
 params_wfn = network_wfn.init(key, sx_dummy, k_dummy)
 
 raveled_params_wfn, _ = ravel_pytree(params_wfn)
@@ -152,7 +153,7 @@ print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
 
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, \
                    make_logpsi2, make_quantum_score
-logpsi_novmap = make_logpsi(network_wfn, L, args.rs)
+logpsi_novmap = make_logpsi(network_wfn, L, args.rs, args.nk)
 logpsi2 = make_logpsi2(logpsi_novmap)
 
 ####################################################################################
@@ -181,8 +182,8 @@ from utils import shard, replicate
 path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_fs_%d_fd_%d_fh1_%d_fh2_%d" % \
                       (args.flow_steps, args.flow_depth, args.flow_h1size, args.flow_h2size) \
-                   + "_wd_%d_wh1_%d_wh2_%d_Nf_%d_K_%d" % \
-                      (args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, args.K) \
+                   + "_wd_%d_wh1_%d_wh2_%d_Nf_%d_K_%d_nk_%d" % \
+                      (args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, args.K, args.nk) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \

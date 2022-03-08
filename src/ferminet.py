@@ -95,23 +95,30 @@ class FermiNet(hk.Module):
             rmj = jnp.reshape(x[:n//2], (n//2, 1, dim)) - jnp.reshape(x[n//2:], (1, n//2, dim)) 
             r = jnp.linalg.norm(jnp.sin(2*jnp.pi*rmj/self.L), axis=-1)*(self.L/(2*jnp.pi))
             alpha = hk.get_parameter("alpha", [self.K], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            jastrow = jnp.exp(-jnp.sum(self.rs*r/(1+  jax.nn.softplus(alpha)[:, None, None] * r), axis=1)) # sum over protons
+            log_jastrow = -jnp.sum(self.rs*r/(1+  jax.nn.softplus(alpha)[:, None, None] * r), axis=(1,2))
 
             #orbital
-            w = hk.get_parameter("w", [self.K, n//4, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            b = hk.get_parameter("b", [self.K, n//4], init=jnp.zeros)
+            w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            b = hk.get_parameter("b", [self.K, h1.shape[-1]], init=jnp.zeros)
+            c = hk.get_parameter("c", [self.K, h1.shape[-1]], init=jnp.zeros)
 
-            phi_up = jnp.einsum("kia,ja->kij", w, h1[n//2:n//2+n//4]) + b[:, :, None] +jnp.ones((n//4,n//4))[None, :, :]
-            phi_dn = jnp.einsum("kia,ja->kij", w, h1[n//2+n//4:]) + b[:, :, None] +jnp.ones((n//4,n//4))[None, :, :]
+            phi = jnp.einsum("ia,kab,jb->kij", h1[n//2:n//2+n//4], w, h1[n//2+n//4:]) \
+                 +jnp.einsum("ia,ka->ki", h1[n//2:n//2+n//4], b)[:, :, None] \
+                 +jnp.einsum("ka,ia->ki", c, h1[n//2+n//4:])[:, None, :] \
+                 +jnp.ones((n//4,n//4))[None, :, :]
 
-            #plane-wave envelope
+            #geminal envelope
+            nk = kpoints.shape[0]//2
             z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
-            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:, None, :] * z[None, :n//4, :]).sum(axis=-1))
-            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:, None, :] * z[None, n//4:, :]).sum(axis=-1))
-        
-            phase, logabsdet = logdet_matmul([phi_up*D_up*jastrow[:, None, :n//4], 
-                                              phi_dn*D_dn*jastrow[:, None, n//4:]])
+            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
+            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
-            return logabsdet + jnp.log(phase) 
+            f = hk.get_parameter("f", [self.K, nk], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            f = f + jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)]) # here we use diagonal f to ensure continuous translation symm
+            D = jnp.einsum("ai,ka,aj->kij", D_up, f, jnp.conjugate(D_dn))
+        
+            phase, logabsdet = logdet_matmul([D*phi], log_jastrow)
+            
+            return logabsdet + jnp.log(phase)  
         else:
             return final(h1) + x

@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 from functools import partial
 
-def make_logpsi(flow, L, rs):
+def make_logpsi(flow, L, rs, nk):
 
     def logpsi(x, params, ks):
 
@@ -13,14 +13,14 @@ def make_logpsi(flow, L, rs):
 
         INPUT:
             x: (n, dim)     
-            ks: (n//2+n, dim)
+            ks: (K+n, dim)
 
         OUTPUT:
             a single complex number ln Psi(x), given in the form of a 2-tuple (real, imag).
         """
         
         n, dim = x.shape
-        k, s = jnp.split(ks, [n//2])
+        k, s = jnp.split(ks, [2*nk])
         log_phi = flow.apply(params, None, jnp.concatenate([s, x]), k)
     
         return jnp.stack([log_phi.real,
