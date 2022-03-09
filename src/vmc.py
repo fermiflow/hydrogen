@@ -29,7 +29,7 @@ def sample_s_and_x(key,
     twist = jax.random.uniform(key_momenta, (batchsize, dim), minval=-0.5, maxval=0.5)
     k_up = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) 
     k_dn = 2*jnp.pi/L * (sp_indices[None, :, :] - twist[:, None, :])
-    k = jnp.concatenate([k_up, k_dn], axis=1) #(batchsize, nk, dim)
+    k = jnp.concatenate([k_up, k_dn], axis=1) #(batchsize, 2*nk, dim)
 
     # proton move
     s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), 

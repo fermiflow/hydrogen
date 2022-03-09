@@ -111,9 +111,7 @@ class FermiNet(hk.Module):
             D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
             D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
-            f = hk.get_parameter("f", [self.K, nk], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            f = f + jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)]) # here we use diagonal f to ensure continuous translation symm
-            D = jnp.einsum("ai,ka,aj->kij", D_up, f, jnp.conjugate(D_dn))
+            D = jnp.dot(D_up.T, jnp.conjugate(D_dn)) # for continuous translational symmetry and twist tests
         
             phase, logabsdet = logdet_matmul([D*phi], jastrow)
             

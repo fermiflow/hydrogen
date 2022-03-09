@@ -5,8 +5,8 @@ import re
 nickname = 'walker-uniform-geminal'
 
 ###############################
-nlist = [14]
-rslist = [1.34]
+nlist = [38]
+rslist = [1.44]
 Tlist = [1200]
 
 dim = 3
@@ -14,7 +14,7 @@ Gmax = 15
 
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 64, 16
 wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
-Nf, K, nk = 5, 4, 19
+Nf, K = 5, 4
 
 lr_proton, lr_electron = 1.0, 0.05
 decay = 1e-2
@@ -29,7 +29,7 @@ mc_proton_width = 0.02
 mc_electron_width = 0.03
 
 walkersize = 256
-batchsize, acc_steps = 1024, 1
+batchsize, acc_steps = 2048, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -38,8 +38,8 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=a100
-#SBATCH --gres=gpu:1
+#SBATCH --partition=v100
+#SBATCH --gres=gpu:8
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
@@ -63,7 +63,7 @@ echo "CUDA devices $CUDA_VISIBLE_DEVICES"\n'''
 
     job += '''
 echo Job started at `date`\n'''
-    job +='taskset -c 4 python '+ str(bin) + ' '
+    job +='python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
     job += '--sr' 

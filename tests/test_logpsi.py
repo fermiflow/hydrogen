@@ -2,6 +2,7 @@ from config import *
 
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, make_logpsi2
 from orbitals import sp_orbitals
+import pytest
 
 key = jax.random.PRNGKey(42)
 
@@ -55,6 +56,31 @@ def test_logpsi():
     Pdn = np.random.permutation(n//2)
     P = np.concatenate([Pup, Pdn+n//2])
     logpsix_P = logpsi(x[P, :], params, jnp.concatenate([k,s[Ps, :]], axis=0))
+
+    print("logpsix:", logpsix)
+    print("logpsix_P:", logpsix_P)
+    assert jnp.allclose(logpsix[0], logpsix_P[0]) 
+    assert jnp.allclose(jnp.exp(2J*(logpsix[1] - logpsix_P[1])), 1.0)
+
+@pytest.mark.skip(reason="not ensured at the moment")
+def test_spin_symmetry():
+    depth, spsize, tpsize, Nf, L, K, nk = 3, 16, 16, 5, 1.234, 4, 7
+    rs = 1.0
+    n, dim = 14, 3
+
+    sp_indices, _ = sp_orbitals(dim)
+    sp_indices = jnp.array(sp_indices)[:nk]
+    k = 2*jnp.pi/L * (sp_indices)
+    k = jnp.concatenate([k, k])
+
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs)
+
+    logpsi = make_logpsi(flow, L, rs, nk)
+    logpsix = logpsi(x, params, jnp.concatenate([k,s], axis=0))
+
+    print("---- Test spin symmetry ----")
+    xP = jnp.concatenate([x[n//2:, :], x[:n//2, :]])
+    logpsix_P = logpsi(xP, params, jnp.concatenate([k,s], axis=0))
 
     print("logpsix:", logpsix)
     print("logpsix_P:", logpsix_P)
@@ -211,4 +237,3 @@ def test_laplacian_hutchinson():
     print("batch:", batch)
     print("laplacian:", laplacian)
     print("laplacian hutchinson mean:", laplacian2_mean, "\tstd:", laplacian2_std)
-

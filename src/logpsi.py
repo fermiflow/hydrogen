@@ -13,7 +13,7 @@ def make_logpsi(flow, L, rs, nk):
 
         INPUT:
             x: (n, dim)     
-            ks: (K+n, dim)
+            ks: (2*nk+n, dim)
 
         OUTPUT:
             a single complex number ln Psi(x), given in the form of a 2-tuple (real, imag).
