@@ -38,6 +38,7 @@ parser.add_argument("--wfn_h2size", type=int, default=16, help="FermiNet: two-pa
 
 parser.add_argument("--Nf", type=int, default=5, help="FermiNet: number of fequencies")
 parser.add_argument("--K", type=int, default=4, help="FermiNet: number of dets")
+parser.add_argument("--nk", type=int, default=None, help="FermiNet: number of plane wave basis")
 
 # parameters relevant to th Ewald summation of Coulomb interaction.
 parser.add_argument("--Gmax", type=int, default=15, help="k-space cutoff in the Ewald summation of Coulomb potential")
@@ -82,7 +83,10 @@ if args.walkersize % num_devices != 0:
 
 n, dim = args.n, args.dim
 assert (n%2==0)
-nk = n//2 # number of plane wave basis in the envelope function
+if args.nk is None:
+    nk = n//2 # number of plane wave basis in the envelope function
+else:
+    nk = args.nk
 
 # Ry = 157888.088922572 Kelvin
 beta = 157888.088922572/args.T # inverse temperature in unit of 1/Ry
@@ -142,7 +146,7 @@ logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 print("\n========== Initialize wavefunction ==========")
 
 def forward_fn(x, k):
-    model = FermiNet(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K, rs=args.rs)
+    model = FermiNet(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K)
     return model(x, k)
 network_wfn = hk.transform(forward_fn)
 sx_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
@@ -178,13 +182,13 @@ else:
 
 print("\n========== Checkpointing ==========")
 
-from utils import shard, replicate
+from utils import shard, replicate, p_split
 
 path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_fs_%d_fd_%d_fh1_%d_fh2_%d" % \
                       (args.flow_steps, args.flow_depth, args.flow_h1size, args.flow_h2size) \
-                   + "_wd_%d_wh1_%d_wh2_%d_Nf_%d_K_%d" % \
-                      (args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, args.K) \
+                   + "_wd_%d_wh1_%d_wh2_%d_Nf_%d_K_%d_nk_%d" % \
+                      (args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, args.K, args.nk) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \
@@ -199,11 +203,29 @@ if not os.path.isdir(path):
 
 ckpt_filename, epoch_finished = checkpoint.find_ckpt_filename(args.restore_path or path)
 
+walker_per_device = args.walkersize // num_devices
+batch_per_device = args.batchsize // num_devices
+
 if ckpt_filename is not None:
     print("Load checkpoint file: %s, epoch finished: %g" %(ckpt_filename, epoch_finished))
     ckpt = checkpoint.load_data(ckpt_filename)
     keys, s, x, params_flow, params_wfn, opt_state = \
         ckpt["keys"], ckpt["s"], ckpt["x"], ckpt["params_flow"], ckpt["params_wfn"], ckpt["opt_state"]
+    
+    keys = jax.random.split(keys[0], num_devices)
+
+    if s.size == num_devices*walker_per_device*n*dim:
+        s = jnp.reshape(s, (num_devices, walker_per_device, n, dim))
+    else:    
+        keys, subkeys = p_split(keys)
+        s = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (walker_per_device, n, dim), jnp.float64, 0., L)
+
+    if x.size == num_devices*batch_per_device*n*dim:
+        x = jnp.reshape(x, (num_devices, batch_per_device, n, dim))
+    else:
+        keys, subkeys = p_split(keys)
+        x = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (batch_per_device, n, dim), jnp.float64, 0., L)
+
     s, x, keys = shard(s), shard(x), shard(keys)
     params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
 else:
@@ -213,32 +235,25 @@ else:
 
     print("Initialize key and coordinate samples...")
 
-    walker_per_device = args.walkersize // num_devices
-    batch_per_device = args.batchsize // num_devices
-
     key, key_proton, key_electron = jax.random.split(key, 3)
 
     s = jax.random.uniform(key_proton, (num_devices, walker_per_device, n, dim), minval=0., maxval=L)
-    #from utils import cubic_init
-    #s = cubic_init(n, 1.4/args.rs) # (n, dim)
-    #s = s[None, None, :, :] + 0.1*jax.random.normal(key_proton, (num_devices, batch_per_device, n, dim)) 
-    #s -= L * jnp.floor(s/L)
-
     x = jax.random.uniform(key_electron, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
-
     keys = jax.random.split(key, num_devices)
-    x, keys = shard(x), shard(keys)
+
+    s, x, keys = shard(s), shard(x), shard(keys)
     params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
 
-    for i in range(args.mc_therm):
-        print("---- thermal step %d ----" % (i+1))
-        keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
-                                   logprob, s, params_flow,
-                                   logpsi2, x, params_wfn,
-                                   args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
-        print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
-    print("keys shape:", keys.shape, "\t\ttype:", type(keys))
-    print("x shape:", x.shape, "\t\ttype:", type(x))
+#we rerun thermalization steps anyway 
+for i in range(args.mc_therm):
+    print("---- thermal step %d ----" % (i+1))
+    keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
+                               logprob, s, params_flow,
+                               logpsi2, x, params_wfn,
+                               args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
+    print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
+print("keys shape:", keys.shape, "\t\ttype:", type(keys))
+print("x shape:", x.shape, "\t\ttype:", type(x))
 
 ####################################################################################
 

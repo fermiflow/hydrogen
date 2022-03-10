@@ -5,6 +5,8 @@ from typing import Sequence, Optional
 import math
 import itertools
 
+p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
+
 shard = jax.pmap(lambda x: x)
 
 def replicate(pytree, num_devices):
