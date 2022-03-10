@@ -214,17 +214,15 @@ if ckpt_filename is not None:
     
     keys = jax.random.split(keys[0], num_devices)
 
-    if s.size == num_devices*walker_per_device*n*dim:
+    if (s.size == num_devices*walker_per_device*n*dim) and (x.size == num_devices*batch_per_device*n*dim):
         s = jnp.reshape(s, (num_devices, walker_per_device, n, dim))
+        x = jnp.reshape(x, (num_devices, batch_per_device, n, dim))
     else:    
         keys, subkeys = p_split(keys)
         s = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (walker_per_device, n, dim), jnp.float64, 0., L)
-
-    if x.size == num_devices*batch_per_device*n*dim:
-        x = jnp.reshape(x, (num_devices, batch_per_device, n, dim))
-    else:
         keys, subkeys = p_split(keys)
         x = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (batch_per_device, n, dim), jnp.float64, 0., L)
+        epoch_finished = 0 
 
     s, x, keys = shard(s), shard(x), shard(keys)
     params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
@@ -244,16 +242,17 @@ else:
     s, x, keys = shard(s), shard(x), shard(keys)
     params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
 
-#we rerun thermalization steps anyway 
-for i in range(args.mc_therm):
-    print("---- thermal step %d ----" % (i+1))
-    keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
-                               logprob, s, params_flow,
-                               logpsi2, x, params_wfn,
-                               args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
-    print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
-print("keys shape:", keys.shape, "\t\ttype:", type(keys))
-print("x shape:", x.shape, "\t\ttype:", type(x))
+#rerun thermalization steps since we regenerated s and x samples
+if epoch_finished == 0:
+    for i in range(args.mc_therm):
+        print("---- thermal step %d ----" % (i+1))
+        keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
+                                   logprob, s, params_flow,
+                                   logpsi2, x, params_wfn,
+                                   args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
+        print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
+    print("keys shape:", keys.shape, "\t\ttype:", type(keys))
+    print("x shape:", x.shape, "\t\ttype:", type(x))
 
 ####################################################################################
 
