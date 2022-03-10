@@ -102,7 +102,7 @@ class FermiNet(hk.Module):
 
             #geminal envelope
             nk = kpoints.shape[0]//2
-            z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
+            z = (final(h1[n//2:]) + x[n//2:])*self.L # backflow coordinates
             D_up = jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
             D_dn = jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
