@@ -188,7 +188,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_fs_%d_fd_%d_fh1_%d_fh2_%d" % \
                       (args.flow_steps, args.flow_depth, args.flow_h1size, args.flow_h2size) \
                    + "_wd_%d_wh1_%d_wh2_%d_Nf_%d_K_%d_nk_%d" % \
-                      (args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, args.K, args.nk) \
+                      (args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, args.K, nk) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \
