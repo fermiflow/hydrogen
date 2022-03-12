@@ -5,8 +5,8 @@ import re
 nickname = 'bootstrap'
 
 ###############################
-nlist = [14]
-rslist = [1.34, 1.44]
+nlist = [38]
+rslist = [1.44]
 Tlist = [1200]
 
 dim = 3
@@ -14,22 +14,22 @@ Gmax = 15
 
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 64, 16
 wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
-Nf, K, nk = 5, 4, 27
+Nf, K, nk = 5, 4, 19
 
-lr_proton, lr_electron = 1.0, 1.0
+lr_proton, lr_electron = 1.0, 0.05
 decay = 1e-2
 damping = 1e-3
 max_norm = 1e-3
 clip_factor = 5.0
 
-mc_proton_steps = 100
+mc_proton_steps = 200
 mc_electron_steps = 100
 
 mc_proton_width = 0.02
 mc_electron_width = 0.03
 
-walkersize = 256
-batchsize, acc_steps = 1024, 1
+walkersize = 512
+batchsize, acc_steps = 2048, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -39,7 +39,7 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=v100
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:8
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
@@ -53,7 +53,7 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
 
     job += '''
-#export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
 echo "The current job ID is $SLURM_JOB_ID"
 echo "Running on $SLURM_JOB_NUM_NODES nodes:"
 echo $SLURM_JOB_NODELIST

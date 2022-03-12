@@ -18,7 +18,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Hydrogen")
 
 parser.add_argument("--folder", default="../data/", help="the folder to save data")
-parser.add_argument("--restore_path", default=None, help="checkpoint file path")
+parser.add_argument("--restore_path", default=None, help="checkpoint path or file")
 
 # physical parameters.
 parser.add_argument("--n", type=int, default=14, help="total number of electrons == # of protons")
