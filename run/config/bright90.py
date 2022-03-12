@@ -2,7 +2,7 @@ import subprocess
 import time 
 import re
 
-nickname = 'bootstrap'
+nickname = 'walker-uniform-geminal'
 
 ###############################
 nlist = [38]
@@ -28,7 +28,7 @@ mc_electron_steps = 100
 mc_proton_width = 0.02
 mc_electron_width = 0.03
 
-walkersize = 512
+walkersize = 256 
 batchsize, acc_steps = 2048, 1
 ###############################
 prog = '../src/main.py'
@@ -53,7 +53,7 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
 
     job += '''
-export XLA_PYTHON_CLIENT_PREALLOCATE=false
+#export XLA_PYTHON_CLIENT_PREALLOCATE=false
 echo "The current job ID is $SLURM_JOB_ID"
 echo "Running on $SLURM_JOB_NUM_NODES nodes:"
 echo $SLURM_JOB_NODELIST

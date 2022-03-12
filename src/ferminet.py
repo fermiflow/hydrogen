@@ -36,11 +36,11 @@ class FermiNet(hk.Module):
         rij = (jnp.reshape(x, (n, 1, dim)) - jnp.reshape(x, (1, n, dim)))
         
         #|r| calculated with periodic consideration
-        r = jnp.linalg.norm(jnp.sin(2*np.pi*rij)+jnp.eye(n)[..., None], axis=-1)*(1.0-jnp.eye(n))
+        r = jnp.linalg.norm(jnp.sin(2*np.pi*rij/self.L)+jnp.eye(n)[..., None], axis=-1)*(1.0-jnp.eye(n))
         
         f = [r[..., None]]
         for n in range(1, self.Nf+1):
-            f += [jnp.cos(2*np.pi*rij*n), jnp.sin(2*np.pi*rij*n)]
+            f += [jnp.cos(2*np.pi*rij/self.L*n), jnp.sin(2*np.pi*rij/self.L*n)]
         return jnp.concatenate(f, axis=-1)
 
     def _combine(self, h1, h2):
@@ -59,8 +59,6 @@ class FermiNet(hk.Module):
         return jnp.concatenate([h1] + g1 + g2, axis=1) 
 
     def __call__(self, x, kpoints=None):
-
-        x = x/self.L
 
         n, dim = x.shape[0], x.shape[1]
 
@@ -102,9 +100,9 @@ class FermiNet(hk.Module):
 
             #geminal envelope
             nk = kpoints.shape[0]//2
-            z = (final(h1[n//2:]) + x[n//2:])*self.L # backflow coordinates
-            D_up = jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
-            D_dn = jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
+            z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
+            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
+            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
             f = hk.get_parameter("f", [self.K, nk], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
             f = f + jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)])
@@ -114,4 +112,4 @@ class FermiNet(hk.Module):
             
             return logabsdet + jnp.log(phase)  
         else:
-            return (final(h1) + x)*self.L
+            return final(h1) + x
