@@ -9,13 +9,17 @@ def test_mcmc():
     print ('beta', beta)
     n = 54
     dim = 3
-    batchsize = 1024
+    batchsize = 512
     
-    mc_therm = 50
-    mc_steps = 1000
-    mc_width = 0.003
+    mc_therm = 10
+    mc_steps = 100
+    mc_width = 0.03
     rs = 1.2
     L = (4/3*jnp.pi*n)**(1/3)
+
+    from orbitals import sp_orbitals
+    sp_indices, Es = sp_orbitals(dim)
+    sp_indices, Es = jnp.array(sp_indices), jnp.array(Es)
 
     def mean_dist(z):
         z = z - L * jnp.floor(z/L)
@@ -24,7 +28,7 @@ def test_mcmc():
         r = jnp.linalg.norm(rij, axis=-1)
         return jnp.mean(r)
 
-    logprob = make_base(n, dim, L, beta, rs)
+    logprob = make_base(n, dim, L, sp_indices[:n])
     logprob = jax.vmap(logprob)
 
     key = jax.random.PRNGKey(42)

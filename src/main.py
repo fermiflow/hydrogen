@@ -106,7 +106,6 @@ print("\n========== Initialize single-particle orbitals ==========")
 from orbitals import sp_orbitals
 sp_indices, Es = sp_orbitals(dim)
 sp_indices, Es = jnp.array(sp_indices), jnp.array(Es)
-sp_indices = sp_indices[:nk]
 print("beta = %f, Ef = %d"% (beta, Es[n//2-1]))
 
 ####################################################################################
@@ -138,7 +137,7 @@ raveled_params_flow, _ = ravel_pytree(params_flow)
 print("#parameters in the flow model: %d" % raveled_params_flow.size)
 
 from sampler import make_flow, make_classical_score
-logprob_novmap = make_flow(network_flow, n, dim, L, beta, args.rs)
+logprob_novmap = make_flow(network_flow, n, dim, L, sp_indices[:n])
 logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 
 ####################################################################################
@@ -249,7 +248,7 @@ if epoch_finished == 0:
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                    logprob, s, params_flow,
                                    logpsi2, x, params_wfn,
-                                   args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
+                                   args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices[:nk])
         print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
     print("x shape:", x.shape, "\t\ttype:", type(x))
@@ -324,7 +323,7 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                                logprob, s, params_flow,
                                                logpsi2, x, params_wfn,
-                                               args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices)
+                                               args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices[:nk])
         ar_s_acc += ar_s
         ar_x_acc += ar_x
 

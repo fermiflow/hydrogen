@@ -14,7 +14,7 @@ Gmax = 15
 
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 64, 16
 wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
-Nf, K, nk = 5, 4, 19
+Nf, K = 5, 4
 
 lr_proton, lr_electron = 1.0, 0.05
 decay = 1e-2
@@ -22,14 +22,14 @@ damping = 1e-3
 max_norm = 1e-3
 clip_factor = 5.0
 
-mc_proton_steps = 200
-mc_electron_steps = 100
+mc_proton_steps = 100
+mc_electron_steps = 400
 
 mc_proton_width = 0.02
-mc_electron_width = 0.03
+mc_electron_width = 0.04
 
 walkersize = 256 
-batchsize, acc_steps = 2048, 1
+batchsize, acc_steps = 1024, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
