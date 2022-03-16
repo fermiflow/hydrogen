@@ -19,7 +19,7 @@ def make_base(n, dim, L, indices):
 
 def make_flow(network, n, dim, L, indices):
     
-    base_logp = make_base(n, dim, L, indices)
+    #base_logp = make_base(n, dim, L, indices)
     @partial(jax.jit, static_argnums=2)
     def logprob(params, s, scan=False):
         flow_flatten = lambda x: network.apply(params, None, x.reshape(n, dim)).reshape(-1)
@@ -35,10 +35,10 @@ def make_flow(network, n, dim, L, indices):
         
         _, logdetjac = jnp.linalg.slogdet(jac)
         
-        #return logdetjac - (n*dim*np.log(L) + jax.scipy.special.gammaln(n+1)) #uniform base
+        return logdetjac - (n*dim*np.log(L) + jax.scipy.special.gammaln(n+1)) #uniform base
 
-        z = network.apply(params, None, s)
-        return logdetjac + base_logp(z)
+        #z = network.apply(params, None, s)
+        #return logdetjac + base_logp(z)
        
     return logprob
 

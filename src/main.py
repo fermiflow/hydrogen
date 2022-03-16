@@ -218,9 +218,9 @@ if ckpt_filename is not None:
         x = jnp.reshape(x, (num_devices, batch_per_device, n, dim))
     else:    
         keys, subkeys = p_split(keys)
-        s = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (walker_per_device, n, dim), jnp.float64, 0., L)
+        s = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (walker_per_device, n, dim), sx_dummy.dtype, 0., L)
         keys, subkeys = p_split(keys)
-        x = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (batch_per_device, n, dim), jnp.float64, 0., L)
+        x = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (batch_per_device, n, dim), sx_dummy.dtype, 0., L)
         epoch_finished = 0 
 
     s, x, keys = shard(s), shard(x), shard(keys)
