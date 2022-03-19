@@ -25,11 +25,11 @@ def sample_s_and_x(key,
     walkersize, dim = s.shape[0], s.shape[2]
     batchsize = x.shape[0]
     
-    # sample twists: for each proton we sample B/W twists 
-    twist = jax.random.uniform(key_momenta, (batchsize//walkersize, dim), minval=-0.5, maxval=0.5)
+    # sample twists
+    twist = jax.random.uniform(key_momenta, (walkersize, dim), minval=-0.5, maxval=0.5)
     k_up = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) 
     k_dn = 2*jnp.pi/L * (sp_indices[None, :, :] - twist[:, None, :])
-    k = jnp.concatenate([k_up, k_dn], axis=1) #(batchsize//walkersize, 2*nk, dim)
+    k = jnp.concatenate([k_up, k_dn], axis=1) #(walkersize, 2*nk, dim)
 
     # proton move
     s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), 
@@ -37,7 +37,7 @@ def sample_s_and_x(key,
     s -= L * jnp.floor(s/L)
     
     # electron move
-    ks = jnp.concatenate([jnp.tile(k, (walkersize, 1, 1)), 
+    ks = jnp.concatenate([jnp.repeat(k, batchsize//walkersize, axis=0),
                           jnp.repeat(s, batchsize//walkersize, axis=0)],   
                           axis=1)
     x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, ks), 
