@@ -194,7 +194,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + ("_lr_%g_%g_decay_%g_damping_%g_norm_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping, args.max_norm) \
                         if args.sr else "_lr_%g" % args.lr_proton) \
                    + "_clip_%g"%(args.clip_factor) \
-                   + "_ws_%d_bs_%d_devices_%d_accsteps_%d" % (args.walkersize, args.batchsize, num_devices, args.acc_steps)
+                   + "_ws_%d_bs_%d_accsteps_%d" % (args.walkersize, args.batchsize, args.acc_steps)
 
 if not os.path.isdir(path):
     os.makedirs(path)
