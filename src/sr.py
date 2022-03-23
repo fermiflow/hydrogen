@@ -18,22 +18,25 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum
         return {'step': 0}
 
     def fishers_fn(params_van, params_flow, ks, s, x):
+
         classical_score = classical_score_fn(params_van, s)
         classical_score = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(classical_score)
 
         quantum_score = quantum_score_fn(x, params_flow, ks)
         quantum_score = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(quantum_score)
+
+        walkersize, batchsize = classical_score.shape[0], quantum_score.shape[0]
         print("classical_score.shape:", classical_score.shape)
         print("quantum_score.shape:", quantum_score.shape)
-        quantum_score_mean = jax.lax.pmean(quantum_score.mean(axis=0), axis_name="p")
-
-        batch_per_device = classical_score.shape[0]
+        
+        quantum_score_mean = quantum_score.reshape(walkersize, batchsize//walkersize, -1).mean(axis=1) # (W,Nparams)
+        #quantum_score_mean = jax.lax.pmean(quantum_score.mean(axis=0), axis_name="p")
 
         classical_fisher = jax.lax.pmean(
-                    classical_score.T.dot(classical_score) / batch_per_device,
+                    classical_score.T.dot(classical_score) / walkersize,
                     axis_name="p")
         quantum_fisher = jax.lax.pmean(
-                    quantum_score.conj().T.dot(quantum_score).real / batch_per_device,
+                    quantum_score.conj().T.dot(quantum_score).real / batchsize,
                     axis_name="p")
 
         return classical_fisher, quantum_fisher, quantum_score_mean
@@ -46,13 +49,17 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum
         """
         grad_params_van, grad_params_flow = grads
         classical_fisher, quantum_fisher, quantum_score_mean = params
-        quantum_fisher -= (quantum_score_mean.conj()[:, None] * quantum_score_mean).real
+        
+        #quantum_fisher -= (quantum_score_mean.conj()[:, None] * quantum_score_mean).real
+        walkersize = quantum_score_mean.shape[0]
+        quantum_fisher -= jax.lax.pmean(
+                          quantum_score_mean.conj().T.dot(quantum_score_mean).real/walkersize, 
+                          axis_name="p")
 
         grad_params_van_raveled, params_van_unravel_fn = ravel_pytree(grad_params_van)
         grad_params_flow_raveled, params_flow_unravel_fn = ravel_pytree(grad_params_flow)
         print("grad_params_van.shape:", grad_params_van_raveled.shape)
         print("grad_params_flow.shape:", grad_params_flow_raveled.shape)
-
 
         classical_fisher += damping * jnp.eye(classical_fisher.shape[0])
         update_params_van_raveled = jax.scipy.linalg.solve(classical_fisher, grad_params_van_raveled)

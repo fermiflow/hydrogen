@@ -79,7 +79,7 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
         Floc = logp_states*rs**2/ beta + Eloc.real + v_pp # (B,)
         
         # average over electron position for each proton walker 
-        Es = jax.lax.pmean(Eloc.reshape(walkersize, batchsize//walkersize).mean(axis=1), axis_name='p') # (W,)
+        Es = Eloc.reshape(walkersize, batchsize//walkersize).mean(axis=1) # (W,)
         Es = _repeat(Es) #(B,)
         
         #pressure in Gpa using viral theorem 

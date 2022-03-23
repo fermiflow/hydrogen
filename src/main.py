@@ -287,6 +287,7 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, grads_acc,
         classical_fisher_acc += classical_fisher
         quantum_fisher_acc += quantum_fisher
         quantum_score_mean_acc += quantum_score_mean
+        print ('quantum_score_mean_acc.shape', quantum_score_mean_acc.shape)
 
     if final_step:
         grads_acc, classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc = \
@@ -313,7 +314,7 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         dummy_input = jnp.zeros(num_devices)
         classical_fisher_acc = jax.pmap(lambda _: jnp.zeros((raveled_params_flow.size, raveled_params_flow.size)))(dummy_input)
         quantum_fisher_acc = jax.pmap(lambda _: jnp.zeros((raveled_params_wfn.size, raveled_params_wfn.size)))(dummy_input)
-        quantum_score_mean_acc = jax.pmap(lambda _: jnp.zeros(raveled_params_wfn.size))(dummy_input)
+        quantum_score_mean_acc = jax.pmap(lambda _: jnp.zeros((walker_per_device, raveled_params_wfn.size)))(dummy_input)
     else:
         classical_fisher_acc = quantum_fisher_acc = quantum_score_mean_acc = None
     ar_s_acc = shard(jnp.zeros(num_devices))
