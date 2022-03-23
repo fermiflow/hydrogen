@@ -61,8 +61,10 @@ parser.add_argument("--lr_proton", type=float, default=1e-2, help="initial learn
 parser.add_argument("--lr_electron", type=float, default=1e-2, help="initial learning rate")
 parser.add_argument("--sr", action='store_true',  help="use the second-order stochastic reconfiguration optimizer")
 parser.add_argument("--decay", type=float, default=1e-2, help="learning rate decay")
-parser.add_argument("--damping", type=float, default=1e-3, help="damping")
-parser.add_argument("--max_norm", type=float, default=1e-3, help="gradnorm maximum")
+parser.add_argument("--damping_proton", type=float, default=1e-3, help="damping")
+parser.add_argument("--damping_electron", type=float, default=1e-3, help="damping")
+parser.add_argument("--maxnorm_proton", type=float, default=1e-3, help="gradnorm maximum")
+parser.add_argument("--maxnorm_electron", type=float, default=1e-3, help="gradnorm maximum")
 parser.add_argument("--clip_factor", type=float, default=5.0, help="clip factor for gradient")
 
 # training parameters.
@@ -170,9 +172,9 @@ if args.sr:
     quantum_score_fn = make_quantum_score(logpsi_novmap)
     from sr import hybrid_fisher_sr
     fishers_fn, optimizer = hybrid_fisher_sr(classical_score_fn, quantum_score_fn,
-            args.lr_proton, args.lr_electron, args.decay, args.damping, args.max_norm)
-    print("Optimizer hybrid_fisher_sr: lr = %g, %g, decay = %g, damping = %g, max_norm = %g." %
-            (args.lr_proton, args.lr_electron, args.decay, args.damping, args.max_norm))
+            args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron)
+    print("Optimizer hybrid_fisher_sr: lr = %g, %g, decay = %g, damping = %g %g, maxnorm = %g %g." %
+            (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron))
 else:
     optimizer = optax.adam(args.lr_proton) #TODO use both lr
     print("Optimizer adam: lr = %g." % args.lr_proton)
@@ -191,7 +193,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \
-                   + ("_lr_%g_%g_decay_%g_damping_%g_norm_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping, args.max_norm) \
+                   + ("_lr_%g_%g_decay_%g_damping_%g_%g_norm_%g_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron) \
                         if args.sr else "_lr_%g" % args.lr_proton) \
                    + "_clip_%g"%(args.clip_factor) \
                    + "_ws_%d_bs_%d_accsteps_%d" % (args.walkersize, args.batchsize, args.acc_steps)

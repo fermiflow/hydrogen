@@ -1,11 +1,12 @@
 import subprocess 
 import time 
 import re
+import numpy as np 
 
-nickname = 'walker-uniform-geminal'
+nickname = 'walker-uniform-geminal-fixsr'
 
 ###############################
-nlist = [38]
+nlist = [14]
 rslist = [1.44]
 Tlist = [1200]
 
@@ -15,21 +16,23 @@ Gmax = 15
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 64, 16
 wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
 Nf, K = 5, 4
+nk = 7
 
-lr_proton, lr_electron = 1.0, 0.05
+lr_proton, lr_electron = 1.0, 0.01
+damping_proton, damping_electron = 1e-3, 1e-2
+maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
+
 decay = 1e-2
-damping = 1e-3
-max_norm = 1e-3
 clip_factor = 5.0
 
 mc_proton_steps = 100
-mc_electron_steps = 400
+mc_electron_steps = 500
 
 mc_proton_width = 0.02
 mc_electron_width = 0.04
 
-walkersize = 256 
-batchsize, acc_steps = 1024, 1
+walkersize = 256
+batchsize, acc_steps = 2048, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -39,7 +42,7 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=v100
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
