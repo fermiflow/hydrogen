@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 from functools import partial
 
-def make_logpsi(flow, L, rs, nk):
+def make_logpsi(flow, L, nk):
 
     def logpsi(x, params, ks):
 

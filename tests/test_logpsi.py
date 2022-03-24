@@ -6,10 +6,10 @@ import pytest
 
 key = jax.random.PRNGKey(42)
 
-def fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs):
+def fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk):
     from ferminet import FermiNet
     def flow_fn(x, k):
-        model = FermiNet(depth, spsize, tpsize, Nf, L, K, rs=rs)
+        model = FermiNet(depth, spsize, tpsize, Nf, L, K)
         return model(x, k)
     flow = hk.transform(flow_fn)
 
@@ -26,7 +26,6 @@ the functions logpsi and logp.
 """
 def test_logpsi():
     depth, spsize, tpsize, Nf, L, K, nk = 3, 16, 16, 5, 1.234, 4, 19
-    rs = 1.0
     n, dim = 14, 3
 
     assert (nk >= n//2)
@@ -36,9 +35,9 @@ def test_logpsi():
     k = 2*jnp.pi/L * (sp_indices)
     k = jnp.concatenate([k, k])
 
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
 
-    logpsi = make_logpsi(flow, L, rs, nk)
+    logpsi = make_logpsi(flow, L, nk)
     logpsix = logpsi(x, params, jnp.concatenate([k,s], axis=0))
 
     print("---- Test ln Psi_n(x + R) = ln Psi_n(x) under any lattice translation `R` of PBC ----")
@@ -73,9 +72,9 @@ def test_spin_symmetry():
     k = 2*jnp.pi/L * (sp_indices)
     k = jnp.concatenate([k, k])
 
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
 
-    logpsi = make_logpsi(flow, L, rs, nk)
+    logpsi = make_logpsi(flow, L, nk)
     logpsix = logpsi(x, params, jnp.concatenate([k,s], axis=0))
 
     print("---- Test spin symmetry ----")
@@ -102,9 +101,9 @@ def test_twist():
     k_dn = 2*jnp.pi/L * (sp_indices - twist[None, ...])
     k = jnp.concatenate([k_up, k_dn])
 
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
 
-    logpsi = make_logpsi(flow, L, rs, nk)
+    logpsi = make_logpsi(flow, L, nk)
     logpsix = logpsi(x, params, jnp.concatenate([k,s], axis=0))
 
     print("---- Test Psi_n(x + R) = Psi_n(x) exp^{i*theta} under any lattice translation `R` with twisted BC----")
@@ -126,9 +125,9 @@ def test_logpsi2():
     k = 2*jnp.pi/L * (sp_indices)
     k = jnp.concatenate([k, k])
 
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
 
-    logpsi = make_logpsi(flow, L, rs, nk)
+    logpsi = make_logpsi(flow, L, nk)
     logp = make_logpsi2(logpsi)
     logpx = logp(x[None, ...], params, jnp.concatenate([k,s], axis=0)[None, ...])
 
@@ -160,9 +159,9 @@ def test_kinetic_energy():
     k = 2*jnp.pi/L * (sp_indices)
     k = jnp.concatenate([k, k])
  
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
 
-    logpsi = make_logpsi(flow, L, rs, nk)
+    logpsi = make_logpsi(flow, L, nk)
     _, logpsi_grad_laplacian = make_logpsi_grad_laplacian(logpsi, forloop=True)
     grad, laplacian = logpsi_grad_laplacian(x[None, ...], params, jnp.concatenate([k,s], axis=0)[None, ...], key)
     assert grad.shape == (1, n, dim)
@@ -195,7 +194,7 @@ def test_laplacian():
     k = 2*jnp.pi/L * (sp_indices)
     k = jnp.concatenate([k, k])
 
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
 
     logpsi = make_logpsi(flow, L, rs, nk)
     _, logpsi_grad_laplacian1 = make_logpsi_grad_laplacian(logpsi)
@@ -219,11 +218,11 @@ def test_laplacian_hutchinson():
     k = 2*jnp.pi/L * (sp_indices)
     k = jnp.concatenate([k, k])
  
-    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk, rs)
+    flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
 
     batch = 4000
 
-    logpsi = make_logpsi(flow, L, rs, nk)
+    logpsi = make_logpsi(flow, L, nk)
     logpsi_grad_laplacian = jax.jit(make_logpsi_grad_laplacian(logpsi)[1])
     grad, laplacian = logpsi_grad_laplacian(x[None, ...], params, jnp.concatenate([k,s], axis=0)[None, ...], key)
 
@@ -237,3 +236,4 @@ def test_laplacian_hutchinson():
     print("batch:", batch)
     print("laplacian:", laplacian)
     print("laplacian hutchinson mean:", laplacian2_mean, "\tstd:", laplacian2_std)
+

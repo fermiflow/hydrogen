@@ -159,7 +159,7 @@ print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
 
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, \
                    make_logpsi2, make_quantum_score
-logpsi_novmap = make_logpsi(network_wfn, L, args.rs, nk)
+logpsi_novmap = make_logpsi(network_wfn, L, nk)
 logpsi2 = make_logpsi2(logpsi_novmap)
 
 ####################################################################################
