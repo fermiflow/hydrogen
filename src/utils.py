@@ -14,7 +14,7 @@ def replicate(pytree, num_devices):
     return shard(stacked_pytree)
 
 def logdet_matmul(xs: Sequence[jnp.ndarray],
-                  w: Optional[jnp.ndarray] = None) -> jnp.ndarray:
+                  logw: Optional[jnp.ndarray] = None) -> jnp.ndarray:
   """Combines determinants and takes dot product with weights in log-domain.
   We use the log-sum-exp trick to reduce numerical instabilities.
   Args:
@@ -24,7 +24,7 @@ def logdet_matmul(xs: Sequence[jnp.ndarray],
       determinants are factorised into block-diagonals for each spin channel).
     w: weight of each determinant. If none, a uniform weight is assumed.
   Returns:
-    sum_i w_i D_i in the log domain, where w_i is the weight of D_i, the i-th
+    sum_i exp(logw_i) D_i in the log domain, where logw_i is the log-weight of D_i, the i-th
     determinant (or product of the i-th determinant in each spin channel, if
     full_det is not used).
   """
@@ -43,14 +43,14 @@ def logdet_matmul(xs: Sequence[jnp.ndarray],
       [jnp.linalg.slogdet(x) for x in xs if x.shape[-1] > 1],
       (1, 0)
   )
+
+  if logw is not None:
+    logdet = logw + logdet
+
   # log-sum-exp trick
   maxlogdet = jnp.max(logdet)
   det = sign_in * det1 * jnp.exp(logdet - maxlogdet)
-
-  if w is None:
-    result = jnp.sum(det)
-  else:
-    result = jnp.dot(det, w)
+  result = jnp.sum(det)
 
   sign_out = result/jnp.abs(result)
   log_out = jnp.log(jnp.abs(result)) + maxlogdet
