@@ -3,7 +3,7 @@ import time
 import re
 import numpy as np 
 
-nickname = 'walker-uniform-geminal-fixsr'
+nickname = 'walker-uniform-geminal-fixsr-logj-float64'
 
 ###############################
 nlist = [14]
@@ -18,8 +18,8 @@ wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
 Nf, K = 5, 4
 nk = 7
 
-lr_proton, lr_electron = 1.0, 0.01
-damping_proton, damping_electron = 1e-3, 1e-2
+lr_proton, lr_electron = 1.0, 0.05
+damping_proton, damping_electron = 1e-3, 0.1
 maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
 
 decay = 1e-2
@@ -31,7 +31,7 @@ mc_electron_steps = 500
 mc_proton_width = 0.02
 mc_electron_width = 0.04
 
-walkersize = 256
+walkersize = 64
 batchsize, acc_steps = 2048, 1
 ###############################
 prog = '../src/main.py'

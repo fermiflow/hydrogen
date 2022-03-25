@@ -196,7 +196,7 @@ def test_laplacian():
 
     flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
 
-    logpsi = make_logpsi(flow, L, rs, nk)
+    logpsi = make_logpsi(flow, L, nk)
     _, logpsi_grad_laplacian1 = make_logpsi_grad_laplacian(logpsi)
     _, logpsi_grad_laplacian2 = make_logpsi_grad_laplacian(logpsi, forloop=False)
     grad1, laplacian1 = logpsi_grad_laplacian1(x[None, ...], params, jnp.concatenate([k,s], axis=0)[None, ...], key)

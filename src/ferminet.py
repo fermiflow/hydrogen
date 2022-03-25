@@ -85,13 +85,13 @@ class FermiNet(hk.Module):
         if self.K > 0:
 
             #jastrow
-            u = hk.get_parameter("u", [self.K, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            u = hk.get_parameter("u", [self.K, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             jastrow = jnp.sum(jnp.einsum("ka,ia->ki", u, h1[:n//2]), axis=1)
 
             #geminal orbital
-            w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
-            b = hk.get_parameter("b", [self.K, h1.shape[-1]], init=jnp.zeros)
-            c = hk.get_parameter("c", [self.K, h1.shape[-1]], init=jnp.zeros)
+            w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
+            b = hk.get_parameter("b", [self.K, h1.shape[-1]], init=jnp.zeros, dtype=x.dtype)
+            c = hk.get_parameter("c", [self.K, h1.shape[-1]], init=jnp.zeros, dtype=x.dtype)
 
             phi = jnp.einsum("ia,kab,jb->kij", h1[n//2:n//2+n//4], w, h1[n//2+n//4:]) \
                  +jnp.einsum("ia,ka->ki", h1[n//2:n//2+n//4], b)[:, :, None] \
@@ -104,7 +104,7 @@ class FermiNet(hk.Module):
             D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
             D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
-            f = hk.get_parameter("f", [self.K, nk], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev))
+            f = hk.get_parameter("f", [self.K, nk], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             f = f + jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)])
             D = jnp.einsum('ai,ka,aj->kij', D_up, f, jnp.conjugate(D_dn))
 
