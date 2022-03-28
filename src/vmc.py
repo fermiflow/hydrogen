@@ -115,8 +115,9 @@ def make_loss(logprob, logpsi, logpsi_grad_laplacian, kappa, G, L, rs, Vconst, b
 
             tv = jax.lax.pmean(jnp.abs(Floc - F).mean(), axis_name="p")
             Floc_clipped = jnp.clip(Floc, F - clip_factor*tv, F + clip_factor*tv)
-            gradF_phi = (logp_states * (Floc_clipped - F)).mean()
-            return gradF_phi
+            gradF_phi = (logp_states * Floc_clipped - F).mean()
+            classical_score = logp_states.mean()
+            return gradF_phi, classical_score
 
         def quantum_lossfn(params_wfn):
             logpsix = logpsi(x, params_wfn, ks) # (B,)

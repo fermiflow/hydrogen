@@ -10,8 +10,8 @@ p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
 shard = jax.pmap(lambda x: x)
 
 def replicate(pytree, num_devices):
-    stacked_pytree = jax.tree_map(lambda x: jax.lax.broadcast(x, (num_devices,)), pytree)
-    return shard(stacked_pytree)
+    dummy_input = jnp.empty(num_devices)
+    return jax.pmap(lambda _: pytree)(dummy_input)
 
 def logdet_matmul(xs: Sequence[jnp.ndarray],
                   logw: Optional[jnp.ndarray] = None) -> jnp.ndarray:

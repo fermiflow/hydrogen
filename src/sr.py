@@ -35,10 +35,11 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum
                     classical_score.T.dot(classical_score) / walkersize,
                     axis_name="p")
         quantum_fisher = jax.lax.pmean(
-                    quantum_score.conj().T.dot(quantum_score).real / batchsize,
+                    quantum_score.conj().T.dot(quantum_score).real / walkersize #TODO understand this 
+                  - quantum_score_mean.conj().T.dot(quantum_score_mean).real / walkersize,
                     axis_name="p")
 
-        return classical_fisher, quantum_fisher, quantum_score_mean
+        return classical_fisher, quantum_fisher
 
     def update_fn(grads, state, params):
         """
@@ -47,12 +48,7 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum
         place them within the `params` argument.
         """
         grad_params_van, grad_params_flow = grads
-        classical_fisher, quantum_fisher, quantum_score_mean = params
-        
-        walkersize = quantum_score_mean.shape[0]
-        quantum_fisher -= jax.lax.pmean(
-                          quantum_score_mean.conj().T.dot(quantum_score_mean).real/walkersize, 
-                          axis_name="p")
+        classical_fisher, quantum_fisher = params
 
         grad_params_van_raveled, params_van_unravel_fn = ravel_pytree(grad_params_van)
         grad_params_flow_raveled, params_flow_unravel_fn = ravel_pytree(grad_params_flow)

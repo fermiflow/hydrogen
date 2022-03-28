@@ -268,39 +268,53 @@ observable_and_lossfn = make_loss(logprob, logpsi, logpsi_grad_laplacian,
 from functools import partial
 
 @partial(jax.pmap, axis_name="p",
-        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0, 0, None) if args.sr else (0, 0, None, 0, 0, 0, 0, 0, None, None, None),
-        out_axes=(0, 0, None, 0, 0, 0, 0, 0) if args.sr else (0, 0, None, 0, 0, None, None, None),
-        static_broadcasted_argnums=11 if args.sr else (8, 9, 10, 11),
-        donate_argnums=(3, 4))
-def update(params_flow, params_wfn, opt_state, ks, s, x, key, grads_acc,
-        classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc, final_step):
+        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0) +
+                ((0, 0, None) if args.sr else (None, None, None)),
+        out_axes=(0, 0, None, 0, 0, 0) +
+                ((0, 0) if args.sr else (None, None)),
+        static_broadcasted_argnums=12 if args.sr else (10, 11, 12),
+        donate_argnums=(3, 4, 5))
+def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_acc, classical_score_acc,
+        classical_fisher_acc, quantum_fisher_acc, final_step):
 
     data, classical_lossfn, quantum_lossfn = observable_and_lossfn(
             params_flow, params_wfn, ks, s, x, key)
 
-    grad_params_flow = jax.grad(classical_lossfn)(params_flow)
+    grad_params_flow, classical_score = jax.jacrev(classical_lossfn)(params_flow)
     grad_params_wfn = jax.grad(quantum_lossfn)(params_wfn)
     grads = grad_params_flow, grad_params_wfn
-    grads = jax.lax.pmean(grads, axis_name="p")
-    grads_acc = jax.tree_multimap(lambda acc, i: acc + i, grads_acc, grads)
+    grads, classical_score = jax.lax.pmean((grads, classical_score), axis_name="p")
+    
+    data_acc, grads_acc, classical_score_acc = jax.tree_multimap(lambda acc, i: acc + i, 
+                                                       (data_acc, grads_acc, classical_score_acc),  
+                                                       (data, grads, classical_score))
 
     if args.sr:
-        classical_fisher, quantum_fisher, quantum_score_mean = fishers_fn(params_flow, params_wfn, ks, s, x)
+        classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, ks, s, x)
         classical_fisher_acc += classical_fisher
         quantum_fisher_acc += quantum_fisher
-        quantum_score_mean_acc += quantum_score_mean
-        print ('quantum_score_mean_acc.shape', quantum_score_mean_acc.shape)
 
     if final_step:
-        grads_acc, classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc = \
+        data_acc, grads_acc, classical_score_acc = \
                 jax.tree_map(lambda acc: acc / args.acc_steps,
-                             (grads_acc, classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc))
+                             (data_acc, grads_acc, classical_score_acc))
+        
+        grad_params_flow, grad_params_wfn = grads_acc
+        grad_params_flow = jax.tree_multimap(lambda grad, classical_score: 
+                                              grad - data_acc["F"] * classical_score,
+                                              grad_params_flow, classical_score_acc)
+        grads_acc = grad_params_flow, grad_params_wfn
+
+        if args.sr:
+            classical_fisher_acc /= args.acc_steps
+            quantum_fisher_acc /= args.acc_steps
+
         updates, opt_state = optimizer.update(grads_acc, opt_state,
-                                params=(classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc) if args.sr else None)
+                                params=(classical_fisher_acc, quantum_fisher_acc) if args.sr else None)
         params_flow, params_wfn = optax.apply_updates((params_flow, params_wfn), updates)
     
-    return params_flow, params_wfn, opt_state, data, grads_acc, \
-            classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc
+    return params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
+            classical_fisher_acc, quantum_fisher_acc
 
 time_of_last_ckpt = time.time()
 log_filename = os.path.join(path, "data.txt")
@@ -310,15 +324,21 @@ if os.path.getsize(log_filename)==0:
     f.write("epoch f f_err e e_err k k_err vpp vpp_err vep vep_err vee vee_err p p_err s s_err acc_s acc_x\n")
 for i in range(epoch_finished + 1, args.epoch + 1):
 
-    grads_acc = jax.tree_map(jnp.zeros_like, (params_flow, params_wfn))
-    grads_acc = shard(grads_acc)
+    data_acc = replicate({"K": 0., "K2": 0.,
+                          "Vpp": 0., "Vpp2": 0.,
+                          "Vep": 0., "Vep2": 0.,
+                          "Vee": 0., "Vee2": 0.,
+                          "P": 0., "P2": 0.,
+                          "E": 0., "E2": 0.,
+                          "F": 0., "F2": 0.,
+                          "S": 0., "S2": 0.}, num_devices)
+    grads_acc = shard(jax.tree_map(jnp.zeros_like, (params_flow, params_wfn)))
+    classical_score_acc = shard(jax.tree_map(jnp.zeros_like, params_flow)) 
     if args.sr:
-        dummy_input = jnp.zeros(num_devices)
-        classical_fisher_acc = jax.pmap(lambda _: jnp.zeros((raveled_params_flow.size, raveled_params_flow.size)))(dummy_input)
-        quantum_fisher_acc = jax.pmap(lambda _: jnp.zeros((raveled_params_wfn.size, raveled_params_wfn.size)))(dummy_input)
-        quantum_score_mean_acc = jax.pmap(lambda _: jnp.zeros((walker_per_device, raveled_params_wfn.size)))(dummy_input)
+        classical_fisher_acc = replicate(jnp.zeros((raveled_params_flow.size, raveled_params_flow.size)), num_devices)
+        quantum_fisher_acc = replicate(jnp.zeros((raveled_params_wfn.size, raveled_params_wfn.size)), num_devices)
     else:
-        classical_fisher_acc = quantum_fisher_acc = quantum_score_mean_acc = None
+        classical_fisher_acc = quantum_fisher_acc = None
     ar_s_acc = shard(jnp.zeros(num_devices))
     ar_x_acc = shard(jnp.zeros(num_devices))
 
@@ -332,20 +352,15 @@ for i in range(epoch_finished + 1, args.epoch + 1):
 
         final_step = (acc == args.acc_steps - 1)
 
-        params_flow, params_wfn, opt_state, data, grads_acc, \
-        classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc \
-            = update(params_flow, params_wfn, opt_state, ks, s, x, keys, grads_acc, classical_fisher_acc, quantum_fisher_acc, quantum_score_mean_acc, final_step)
+        params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
+        classical_fisher_acc, quantum_fisher_acc\
+            = update(params_flow, params_wfn, opt_state, ks, s, x, keys, 
+                     data_acc, grads_acc, classical_score_acc, classical_fisher_acc, quantum_fisher_acc, final_step)
 
-        data = jax.tree_map(lambda x: x[0], data)
-        if acc == 0:
-            data_acc = data
-        else:
-            data_acc = jax.tree_multimap(lambda acc, i: acc + i, data_acc, data)
-
+    data = jax.tree_map(lambda x: x[0], data_acc)
     ar_s = ar_s_acc[0] / args.acc_steps
     ar_x = ar_x_acc[0] / args.acc_steps
 
-    data = jax.tree_map(lambda acc: acc / args.acc_steps, data_acc)
     K, K2, Vpp, Vpp2, Vep, Vep2, Vee, Vee2, P, P2, E, E2, F, F2, S, S2 = \
             data["K"], data["K2"], \
             data["Vpp"], data["Vpp2"],\
