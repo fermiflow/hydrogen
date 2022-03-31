@@ -86,7 +86,7 @@ class FermiNet(hk.Module):
 
             #jastrow
             u = hk.get_parameter("u", [self.K, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
-            jastrow = jnp.sum(jnp.einsum("ka,ia->ki", u, h1[:n//2]), axis=1)
+            jastrow = jnp.einsum("ka,ia->k", u, h1[:n//2])
 
             #geminal orbital
             w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
