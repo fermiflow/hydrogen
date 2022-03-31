@@ -3,21 +3,7 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 
-def make_base(n, dim, L, indices):
-    '''
-    ideal fermi gas in a periodic box 
-    '''
-
-    def logprob(x):
-        k = 2*jnp.pi/L * indices
-        k_dot_x = (k * x[:, None, :]).sum(axis=-1)
-        D = 1 / L**(dim/2) * jnp.exp(1j * k_dot_x)
-        _, logabsdet = jnp.linalg.slogdet(D)
-        return logabsdet*2 - jax.scipy.special.gammaln(n+1)  
-        
-    return logprob
-
-def make_flow(network, n, dim, L, indices):
+def make_flow(network, n, dim, L):
     
     #base_logp = make_base(n, dim, L, indices)
     @partial(jax.jit, static_argnums=2)

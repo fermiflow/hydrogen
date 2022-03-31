@@ -139,7 +139,7 @@ raveled_params_flow, _ = ravel_pytree(params_flow)
 print("#parameters in the flow model: %d" % raveled_params_flow.size)
 
 from sampler import make_flow, make_classical_score
-logprob_novmap = make_flow(network_flow, n, dim, L, sp_indices[:n])
+logprob_novmap = make_flow(network_flow, n, dim, L)
 logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 
 ####################################################################################
@@ -290,7 +290,7 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_ac
                                                        (data, grads, classical_score))
 
     if args.sr:
-        classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, ks, s, x)
+        classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, ks, s, x, opt_state)
         classical_fisher_acc += classical_fisher
         quantum_fisher_acc += quantum_fisher
 
@@ -356,6 +356,10 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         classical_fisher_acc, quantum_fisher_acc\
             = update(params_flow, params_wfn, opt_state, ks, s, x, keys, 
                      data_acc, grads_acc, classical_score_acc, classical_fisher_acc, quantum_fisher_acc, final_step)
+        
+        #print ('fisher diag', jnp.diag(quantum_fisher_acc[0]).min(), jnp.diag(quantum_fisher_acc[0]).max())
+        #w, _ = jnp.linalg.eigh(quantum_fisher_acc[0])
+        #print ('fisher eigh:', w.min(), w.max())
 
     data = jax.tree_map(lambda x: x[0], data_acc)
     ar_s = ar_s_acc[0] / args.acc_steps
@@ -386,7 +390,9 @@ for i in range(epoch_finished + 1, args.epoch + 1):
             "E:", E/args.rs**2, "E_std:", E_std/args.rs**2,
             "K:", K/args.rs**2, "K_std:", K_std/args.rs**2,
             "S:", S, "S_std:", S_std,
-            "accept_rate:", ar_s, ar_x)
+            "accept_rate:", ar_s, ar_x, 
+            "gnorm:", opt_state["gnorm"]
+            )
     f.write( ("%6d" + "  %.6f"*16 + "  %.4f"*2 + "\n") % (i,
                                                 F/n/args.rs**2, F_std/n/args.rs**2,
                                                 E/n/args.rs**2, E_std/n/args.rs**2,

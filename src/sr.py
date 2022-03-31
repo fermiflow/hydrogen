@@ -15,9 +15,11 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum
     """
 
     def init_fn(params):
-        return {'step': 0}
+        return {'step': 0,
+                'gnorm': jnp.zeros(2)
+                }
 
-    def fishers_fn(params_van, params_flow, ks, s, x):
+    def fishers_fn(params_van, params_flow, ks, s, x, state):
 
         classical_score = classical_score_fn(params_van, s)
         classical_score = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(classical_score)
@@ -37,11 +39,11 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum
                     quantum_score.conj().T.dot(quantum_score).real / batchsize,  
                     axis_name="p")
 
-        #TODO understand this: why we do not need to substract this ???
-        #quantum_score_mean = quantum_score.reshape(walkersize, batchsize//walkersize, -1).mean(axis=1) # (W,Nparams)
-        #quantum_fisher -= jax.lax.pmean(
-        #            quantum_score_mean.conj().T.dot(quantum_score_mean).real / walkersize,
-        #            axis_name="p")
+        quantum_score_mean = quantum_score.reshape(walkersize, batchsize//walkersize, -1).mean(axis=1) # (W,Nparams)
+        factor = 1.- 1./(1+decay*state['step'])
+        quantum_fisher -= factor*jax.lax.pmean(
+                    quantum_score_mean.conj().T.dot(quantum_score_mean).real / walkersize,
+                    axis_name="p")
 
         return classical_fisher, quantum_fisher
 
@@ -82,6 +84,7 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum
         update_params_flow = params_flow_unravel_fn(update_params_flow_raveled)
 
         state["step"] += 1
+        state["gnorm"] = jnp.array([gnorm_van, gnorm_flow])
 
         return (update_params_van, update_params_flow), state
 
