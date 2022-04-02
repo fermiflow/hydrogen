@@ -66,6 +66,7 @@ parser.add_argument("--damping_electron", type=float, default=1e-3, help="dampin
 parser.add_argument("--maxnorm_proton", type=float, default=1e-3, help="gradnorm maximum")
 parser.add_argument("--maxnorm_electron", type=float, default=1e-3, help="gradnorm maximum")
 parser.add_argument("--clip_factor", type=float, default=5.0, help="clip factor for gradient")
+parser.add_argument("--alpha", type=float, default=0.1, help="mixing of new fisher matrix")
 
 # training parameters.
 parser.add_argument("--walkersize", type=int, default=16, help="walker size for protons")
@@ -195,7 +196,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + ("_ht" if args.hutchinson else "") \
                    + ("_lr_%g_%g_decay_%g_damping_%g_%g_norm_%g_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron) \
                         if args.sr else "_lr_%g" % args.lr_proton) \
-                   + "_clip_%g"%(args.clip_factor) \
+                   + "_clip_%g_alpha_%g"%(args.clip_factor, args.alpha) \
                    + "_ws_%d_bs_%d_accsteps_%d" % (args.walkersize, args.batchsize, args.acc_steps)
 
 if not os.path.isdir(path):
@@ -269,13 +270,13 @@ from functools import partial
 
 @partial(jax.pmap, axis_name="p",
         in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0) +
-                ((0, 0, None) if args.sr else (None, None, None)),
+                ((0, 0, None) if args.sr else (None, None, None, None)),
         out_axes=(0, 0, None, 0, 0, 0) +
-                ((0, 0) if args.sr else (None, None)),
-        static_broadcasted_argnums=12 if args.sr else (10, 11, 12),
+                ((0, 0) if args.sr else (None, None, None)),
+        static_broadcasted_argnums=(12,13) if args.sr else (10, 11, 12, 13),
         donate_argnums=(3, 4, 5))
 def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_acc, classical_score_acc,
-        classical_fisher_acc, quantum_fisher_acc, final_step):
+        classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher):
 
     data, classical_lossfn, quantum_lossfn = observable_and_lossfn(
             params_flow, params_wfn, ks, s, x, key)
@@ -291,8 +292,15 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_ac
 
     if args.sr:
         classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, ks, s, x, opt_state)
-        classical_fisher_acc += classical_fisher
-        quantum_fisher_acc += quantum_fisher
+
+        if mix_fisher:
+            i= opt_state["acc"]
+            # 1/(1-alpha)**(a-1-i) factor to account for the same mixing factor for all acc steps
+            classical_fisher_acc = (1-args.alpha)*classical_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*classical_fisher/args.acc_steps
+            quantum_fisher_acc = (1-args.alpha)*quantum_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*quantum_fisher/args.acc_steps
+        else:
+            classical_fisher_acc += classical_fisher/args.acc_steps
+            quantum_fisher_acc += quantum_fisher/args.acc_steps
 
     if final_step:
         data_acc, grads_acc, classical_score_acc = \
@@ -305,16 +313,19 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_ac
                                               grad_params_flow, classical_score_acc)
         grads_acc = grad_params_flow, grad_params_wfn
 
-        if args.sr:
-            classical_fisher_acc /= args.acc_steps
-            quantum_fisher_acc /= args.acc_steps
-
         updates, opt_state = optimizer.update(grads_acc, opt_state,
                                 params=(classical_fisher_acc, quantum_fisher_acc) if args.sr else None)
         params_flow, params_wfn = optax.apply_updates((params_flow, params_wfn), updates)
     
     return params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
             classical_fisher_acc, quantum_fisher_acc
+
+if args.sr:
+    classical_fisher_acc = replicate(jnp.zeros((raveled_params_flow.size, raveled_params_flow.size)), num_devices)
+    quantum_fisher_acc = replicate(jnp.zeros((raveled_params_wfn.size, raveled_params_wfn.size)), num_devices)
+else:
+    classical_fisher_acc = quantum_fisher_acc = None
+mix_fisher = False
 
 time_of_last_ckpt = time.time()
 log_filename = os.path.join(path, "data.txt")
@@ -334,11 +345,6 @@ for i in range(epoch_finished + 1, args.epoch + 1):
                           "S": 0., "S2": 0.}, num_devices)
     grads_acc = shard(jax.tree_map(jnp.zeros_like, (params_flow, params_wfn)))
     classical_score_acc = shard(jax.tree_map(jnp.zeros_like, params_flow)) 
-    if args.sr:
-        classical_fisher_acc = replicate(jnp.zeros((raveled_params_flow.size, raveled_params_flow.size)), num_devices)
-        quantum_fisher_acc = replicate(jnp.zeros((raveled_params_wfn.size, raveled_params_wfn.size)), num_devices)
-    else:
-        classical_fisher_acc = quantum_fisher_acc = None
     ar_s_acc = shard(jnp.zeros(num_devices))
     ar_x_acc = shard(jnp.zeros(num_devices))
 
@@ -347,23 +353,27 @@ for i in range(epoch_finished + 1, args.epoch + 1):
                                                logprob, s, params_flow,
                                                logpsi2, x, params_wfn,
                                                args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices[:nk])
-        ar_s_acc += ar_s
-        ar_x_acc += ar_x
+        ar_s_acc += ar_s/args.acc_steps
+        ar_x_acc += ar_x/args.acc_steps
 
         final_step = (acc == args.acc_steps - 1)
+        opt_state["acc"] = acc
 
         params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
         classical_fisher_acc, quantum_fisher_acc\
             = update(params_flow, params_wfn, opt_state, ks, s, x, keys, 
-                     data_acc, grads_acc, classical_score_acc, classical_fisher_acc, quantum_fisher_acc, final_step)
+                     data_acc, grads_acc, classical_score_acc, classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher)
         
+        # if we have finished a step, we can mix fisher from now on
+        if final_step: mix_fisher = True
+
         #print ('fisher diag', jnp.diag(quantum_fisher_acc[0]).min(), jnp.diag(quantum_fisher_acc[0]).max())
         #w, _ = jnp.linalg.eigh(quantum_fisher_acc[0])
         #print ('fisher eigh:', w.min(), w.max())
 
     data = jax.tree_map(lambda x: x[0], data_acc)
-    ar_s = ar_s_acc[0] / args.acc_steps
-    ar_x = ar_x_acc[0] / args.acc_steps
+    ar_s = ar_s_acc[0] 
+    ar_x = ar_x_acc[0] 
 
     K, K2, Vpp, Vpp2, Vep, Vep2, Vee, Vee2, P, P2, E, E2, F, F2, S, S2 = \
             data["K"], data["K2"], \

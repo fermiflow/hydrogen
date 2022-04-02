@@ -66,6 +66,7 @@ if __name__=='__main__':
                         'maxnorm_proton': maxnorm_proton,
                         'maxnorm_electron': maxnorm_electron,
                         'clip_factor': clip_factor,
+                        'alpha': alpha, 
                         'acc_steps': acc_steps,
                         }
                 logname = jobdir
