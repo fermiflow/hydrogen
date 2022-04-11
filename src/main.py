@@ -90,6 +90,7 @@ if args.nk is None:
     nk = n//2 # number of plane wave basis in the envelope function
 else:
     nk = args.nk
+    assert(nk >= n//2)
 
 # Ry = 157888.088922572 Kelvin
 beta = 157888.088922572/args.T # inverse temperature in unit of 1/Ry

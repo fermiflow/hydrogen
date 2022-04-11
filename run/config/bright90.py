@@ -6,16 +6,17 @@ import numpy as np
 nickname = 'walker-uniform-geminal-fixsr-logj-float64-decay-compact'
 
 ###############################
-nlist = [14]
+nlist = [16]
 rslist = [1.44]
 Tlist = [1200]
 
 dim = 3
 Gmax = 15
 
-flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 64, 16
+flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 32, 16
 wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
-Nf, K = 5, 4
+Nf, K = 5, 1
+nk = 19
 
 lr_proton, lr_electron = 1.0, 0.05
 damping_proton, damping_electron = 1e-3, 1e-3
@@ -31,8 +32,8 @@ mc_electron_steps = 400
 mc_proton_width = 0.02
 mc_electron_width = 0.04
 
-walkersize = 256
-batchsize, acc_steps = 2048, 1
+walkersize = 512
+batchsize, acc_steps = 4096, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -66,7 +67,7 @@ echo "CUDA devices $CUDA_VISIBLE_DEVICES"\n'''
 
     job += '''
 echo Job started at `date`\n'''
-    job +='taskset -c 4 python '+ str(bin) + ' '
+    job +='python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
     job += '--sr' 
