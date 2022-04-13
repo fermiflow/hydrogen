@@ -21,6 +21,7 @@ class FermiNet(hk.Module):
         super().__init__(name=name)
         assert (depth >= 2)
         self.depth = depth
+        self.h1_size = h1_size
         self.Nf = Nf
         self.L = L
         self.K = K
@@ -88,15 +89,18 @@ class FermiNet(hk.Module):
             #jastrow
             u = hk.get_parameter("u", [self.K, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             jastrow = jnp.einsum("ka,ia->k", u, h1[:n//2])
-
+            
             #geminal orbital
+            orb_fn = hk.nets.MLP([self.h1_size, self.h1_size], w_init=hk.initializers.TruncatedNormal(self.init_stddev), activation=jax.nn.softplus)
+            orb = orb_fn(h1[n//2:].astype(jnp.complex128))
+
             w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             b = hk.get_parameter("b", [self.K, h1.shape[-1]], init=jnp.zeros, dtype=x.dtype)
             c = hk.get_parameter("c", [self.K, h1.shape[-1]], init=jnp.zeros, dtype=x.dtype)
 
-            phi = jnp.einsum("ia,kab,jb->kij", h1[n//2:n//2+n//4], w, h1[n//2+n//4:]) \
-                 +jnp.einsum("ia,ka->ki", h1[n//2:n//2+n//4], b)[:, :, None] \
-                 +jnp.einsum("ka,ia->ki", c, h1[n//2+n//4:])[:, None, :] \
+            phi = jnp.einsum("ia,kab,jb->kij", orb[:n//4], w, orb[n//4:]) \
+                 +jnp.einsum("ia,ka->ki", orb[:n//4], b)[:, :, None] \
+                 +jnp.einsum("ka,ia->ki", c, orb[n//4:])[:, None, :] \
                  +jnp.ones((n//4,n//4))[None, :, :]
 
             #geminal envelope

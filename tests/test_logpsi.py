@@ -98,7 +98,7 @@ def test_twist():
 
     twist = jnp.array( np.random.uniform(-0.5, 0.5, (dim,)) )
     k_up = 2*jnp.pi/L * (sp_indices + twist[None, ...])
-    k_dn = 2*jnp.pi/L * (sp_indices - twist[None, ...])
+    k_dn = 2*jnp.pi/L * (sp_indices + twist[None, ...])
     k = jnp.concatenate([k_up, k_dn])
 
     flow, s, x, params = fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk)
@@ -106,14 +106,14 @@ def test_twist():
     logpsi = make_logpsi(flow, L, nk)
     logpsix = logpsi(x, params, jnp.concatenate([k,s], axis=0))
 
-    print("---- Test Psi_n(x + R) = Psi_n(x) exp^{i*theta} under any lattice translation `R` with twisted BC----")
+    print("---- Test Psi_n(x + R) = Psi_n(x) exp^{i*theta*R} under any lattice translation `R` with twisted BC----")
     image = np.random.randint(-5, 6, size=(n, dim)) * L
     logpsix_image = logpsi(x + image, params, jnp.concatenate([k,s], axis=0))
     print("logpsix:", logpsix[0] + 1J*logpsix[1])
-    print("logpsix_image:", logpsix_image[0] + 1J*logpsix_image[1]- 1J* jnp.sum(2*jnp.pi*twist/L*image))
+    print("logpsix_image:", logpsix_image[0] + 1J*logpsix_image[1]- 1J* jnp.sum(2*jnp.pi*twist/L*image[:n//2]) +  1J* jnp.sum(2*jnp.pi*twist/L*image[n//2:]) )
 
     assert jnp.allclose(logpsix[0], logpsix_image[0])
-    assert jnp.allclose(jnp.exp(1J*( logpsix[1]+ jnp.sum(2*jnp.pi*twist/L*image) - logpsix_image[1])), 1.0)
+    assert jnp.allclose(jnp.exp(1J*(logpsix[1]+ jnp.sum(2*jnp.pi*twist/L*image[:n//2])-jnp.sum(2*jnp.pi*twist/L*image[n//2:]) - logpsix_image[1])), 1.0)
 
 def test_logpsi2():
     depth, spsize, tpsize, Nf, L, K, nk = 3, 16, 16, 5, 1.234, 8, 19
@@ -180,7 +180,8 @@ def test_kinetic_energy():
         h = jnp.reshape(h, (n*dim, n*dim))
         return -jnp.trace(h)/(psi_real(x) + 1J * psi_imag(x))
     kin = kinetic_energy(x, jnp.concatenate([k,s], axis=0))
-
+    
+    print (kin, (2*np.pi/L)**2*(0+6)*2)
     assert jnp.allclose(kinetic, kin)
 
 def test_laplacian():
