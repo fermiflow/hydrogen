@@ -51,7 +51,6 @@ if __name__=='__main__':
                         'wfn_h2size': wfn_h2size,
                         'Nf': Nf, 
                         'K': K,
-                        'nk': nk,
                         'folder':resfolder,
                         'walkersize': walkersize,
                         'batchsize':batchsize,

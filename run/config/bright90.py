@@ -15,10 +15,9 @@ Gmax = 15
 
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 32, 16
 wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
-Nf, K = 5, 1
-nk = 19
+Nf, K = 5, 4
 
-lr_proton, lr_electron = 1.0, 0.05
+lr_proton, lr_electron = 1.0, 1.0
 damping_proton, damping_electron = 1e-3, 1e-3
 maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
 
@@ -26,8 +25,8 @@ decay = 1e-2
 clip_factor = 5.0
 alpha = 0.1
 
-mc_proton_steps = 100
-mc_electron_steps = 400
+mc_proton_steps = 50
+mc_electron_steps = 500
 
 mc_proton_width = 0.02
 mc_electron_width = 0.04
@@ -42,8 +41,8 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=v100
-#SBATCH --gres=gpu:4
+#SBATCH --partition=a100
+#SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s

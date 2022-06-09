@@ -82,8 +82,6 @@ class FermiNet(hk.Module):
         f = self._combine(h1, h2)
         h1 = jnp.tanh(self.fc1[-1](f)) + h1
 
-        final = hk.Linear(dim, w_init=hk.initializers.TruncatedNormal(self.init_stddev), with_bias=False)
-
         if self.K > 0:
 
             #jastrow
@@ -100,9 +98,8 @@ class FermiNet(hk.Module):
 
             #geminal envelope
             nk = kpoints.shape[0]//2
-            z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
-            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
-            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
+            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * x[None, n//2:n//2+n//4, :]).sum(axis=-1))
+            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * x[None, n//2+n//4:, :]).sum(axis=-1))
             
             f = hk.get_parameter("f", [self.K, nk-1], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             f =  jnp.concatenate([jnp.zeros((self.K, 1)), f], axis=1) 
@@ -114,4 +111,5 @@ class FermiNet(hk.Module):
             
             return logabsdet + jnp.log(phase)  
         else:
+            final = hk.Linear(dim, w_init=hk.initializers.TruncatedNormal(self.init_stddev), with_bias=False)
             return final(h1) + x
