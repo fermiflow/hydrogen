@@ -15,7 +15,8 @@ Gmax = 15
 
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 32, 16
 wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
-Nf, K = 5, 4
+Nf, K = 5, 1
+nk = 8
 
 lr_proton, lr_electron = 1.0, 1.0
 damping_proton, damping_electron = 1e-3, 1e-3
