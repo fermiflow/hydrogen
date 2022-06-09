@@ -35,7 +35,7 @@ class FermiNet(hk.Module):
         rij = (jnp.reshape(x, (n, 1, dim)) - jnp.reshape(x, (1, n, dim)))
         
         #|r| calculated with periodic consideration
-        r = jnp.linalg.norm(jnp.sin(2*np.pi*rij/self.L)+jnp.eye(n)[..., None], axis=-1)*(1.0-jnp.eye(n))
+        r = jnp.linalg.norm(jnp.sin(np.pi*rij/self.L)+jnp.eye(n)[..., None], axis=-1)*(1.0-jnp.eye(n))
         
         f = [r[..., None]]
         for n in range(1, self.Nf+1):
@@ -104,8 +104,10 @@ class FermiNet(hk.Module):
             D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
             D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
-            f = hk.get_parameter("f", [self.K, nk], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
-            f = f + jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)])
+            f = hk.get_parameter("f", [self.K, nk-1], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
+            f =  jnp.concatenate([jnp.zeros((self.K, 1)), f], axis=1) 
+            f += jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)])
+
             D = jnp.einsum('ai,ka,aj->kij', D_up, f, jnp.conjugate(D_dn))
 
             phase, logabsdet = logdet_matmul([D*phi], jastrow)
