@@ -3,7 +3,7 @@ import time
 import re
 import numpy as np 
 
-nickname = 'ff35520-r-fixk0'
+nickname = 'ff35520-r-fixk0-backflow'
 
 ###############################
 nlist = [16]
@@ -16,7 +16,7 @@ Gmax = 15
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 32, 16
 wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
 Nf, K = 5, 1
-nk = 8
+nk = 33
 
 lr_proton, lr_electron = 1.0, 1.0
 damping_proton, damping_electron = 1e-3, 1e-3
