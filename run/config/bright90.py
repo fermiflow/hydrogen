@@ -3,7 +3,7 @@ import time
 import re
 import numpy as np 
 
-nickname = 'walker-uniform-geminal-fixsr-logj-float64-decay-compact'
+nickname = 'ff35520-r-fixk0'
 
 ###############################
 nlist = [16]
@@ -42,8 +42,8 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=a100
-#SBATCH --gres=gpu:A100_80G:1
+#SBATCH --partition=v100
+#SBATCH --gres=gpu:4
 #SBATCH --nodes=1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
