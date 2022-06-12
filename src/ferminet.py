@@ -62,7 +62,7 @@ class FermiNet(hk.Module):
 
         n, dim = x.shape[0], x.shape[1]
 
-        h1 = None 
+        h1 = None if kpoints is None else jnp.repeat(kpoints[0][None, :], n, axis=0) # twist as a feature
         h2 = self._h2(x)
 
         for d in range(self.depth-1):
@@ -104,9 +104,11 @@ class FermiNet(hk.Module):
             D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
             D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
-            f = hk.get_parameter("f", [self.K, nk-1], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
-            f =  jnp.concatenate([jnp.zeros((self.K, 1)), f], axis=1) 
-            f += jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)])
+            mlp = hk.nets.MLP([self.h1_size, self.K*(nk-1)], w_init=hk.initializers.TruncatedNormal(self.init_stddev), activation=jnp.tanh)
+            f = jax.nn.softplus(mlp(kpoints[0])).reshape(self.K, nk-1) # twist dependent momentum occupation
+            #f = hk.get_parameter("f", [self.K, nk-1], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
+            f = jnp.concatenate([jnp.ones((self.K, 1)), f], axis=1) 
+            #f += jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)])
 
             D = jnp.einsum('ai,ka,aj->kij', D_up, f, jnp.conjugate(D_dn))
 
