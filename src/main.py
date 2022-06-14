@@ -415,7 +415,7 @@ for i in range(epoch_finished + 1, args.epoch + 1):
                                                 S/n, S_std/n, 
                                                 ar_s, ar_x) )
 
-    if time.time() - time_of_last_ckpt > 600:
+    if time.time() - time_of_last_ckpt > 3600:
         ckpt = {"keys": keys, "s": s, "x": x,
                 "params_flow": jax.tree_map(lambda x: x[0], params_flow),
                 "params_wfn": jax.tree_map(lambda x: x[0], params_wfn),
