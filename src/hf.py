@@ -30,7 +30,7 @@ class Hydrogen:
         # gamma point [0, 0, 0] (unit: reciprocal lattice vector, 2*pi/length)
         # First Brillouin zone: [-0.5, 0.5]^3
         # baldereschi K point [0.25, 0.25, 0.25]
-        self.kpts = self.cell.make_kpts([1, 1, 1], scaled_center=[0.25, 0.25, 0.25])
+        self.kpts = self.cell.make_kpts([1, 1, 1], scaled_center=[0., 0., 0.])
         self.kmf = scf.khf.KRHF(self.cell, kpts=self.kpts)
         self.kmf.conv_tol = 1e-6
         self.kmf.verbose = 0
