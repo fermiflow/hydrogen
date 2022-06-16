@@ -8,14 +8,16 @@ import time
 
 import checkpoint
 from vmc import sample_s_and_x, make_loss
+from utils import make_different_rng_key_on_all_devices
 
 print("jax.__version__:", jax.__version__)
-key = jax.random.PRNGKey(42)
-num_devices = jax.device_count()
-print("Number of GPU devices:", num_devices)
 
 import argparse
 parser = argparse.ArgumentParser(description="Hydrogen")
+
+parser.add_argument("--server_addr", type=str, default="10.1.1.3:9999", help="server ip addr")
+parser.add_argument("--num_hosts", type=int, default=1, help="num of hosts")
+parser.add_argument("--host_idx", type=int, default=0, help="index of current host")
 
 parser.add_argument("--folder", default="../data/", help="the folder to save data")
 parser.add_argument("--restore_path", default=None, help="checkpoint path or file")
@@ -76,13 +78,28 @@ parser.add_argument("--epoch", type=int, default=100000, help="final epoch")
 
 args = parser.parse_args()
 
+jax.distributed.initialize(args.server_addr, args.num_hosts, args.host_idx)
+print("Cluster connected with totally %d GPUs" % jax.device_count())
+print("This is process %d with %d local GPUs." % (jax.process_index(), jax.local_device_count()))
+
+num_devices = jax.local_device_count()
+num_hosts = jax.device_count() // num_devices
+
 if args.batchsize % args.walkersize != 0:
     raise ValueError("Batch size must be divisible by walkersize. "
                      "Got batch = %d for %d walkers now." % (args.batchsize, args.walkersize))
 
-if args.walkersize % num_devices != 0:
+if args.walkersize % (num_devices * num_hosts) != 0:
     raise ValueError("Batch size must be divisible by the number of GPU devices. "
                          "Got batch = %d for %d devices now." % (args.walkersize, num_devices))
+
+host_batch_size = args.batchsize // num_hosts
+host_walker_size = args.walkersize // num_hosts
+
+device_batch_size = host_batch_size // num_devices  
+device_walker_size = host_walker_size // num_devices 
+
+key = jax.random.PRNGKey(42)
 
 n, dim = args.n, args.dim
 assert (n%2==0)
@@ -178,8 +195,7 @@ if args.sr:
     print("Optimizer hybrid_fisher_sr: lr = %g, %g, decay = %g, damping = %g %g, maxnorm = %g %g." %
             (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron))
 else:
-    optimizer = optax.adam(args.lr_proton) #TODO use both lr
-    print("Optimizer adam: lr = %g." % args.lr_proton)
+    raise NotImplementedError("Only support sr optimizer for now")
 
 ####################################################################################
 
@@ -206,44 +222,36 @@ if not os.path.isdir(path):
 
 ckpt_filename, epoch_finished = checkpoint.find_ckpt_filename(args.restore_path or path)
 
-walker_per_device = args.walkersize // num_devices
-batch_per_device = args.batchsize // num_devices
-
 if ckpt_filename is not None:
     print("Load checkpoint file: %s, epoch finished: %g" %(ckpt_filename, epoch_finished))
     ckpt = checkpoint.load_data(ckpt_filename)
-    keys, s, x, params_flow, params_wfn, opt_state = \
-        ckpt["keys"], ckpt["s"], ckpt["x"], ckpt["params_flow"], ckpt["params_wfn"], ckpt["opt_state"]
-    
-    keys = jax.random.split(keys[0], num_devices)
-
-    if (s.size == num_devices*walker_per_device*n*dim) and (x.size == num_devices*batch_per_device*n*dim):
-        s = jnp.reshape(s, (num_devices, walker_per_device, n, dim))
-        x = jnp.reshape(x, (num_devices, batch_per_device, n, dim))
-    else:    
-        keys, subkeys = p_split(keys)
-        s = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (walker_per_device, n, dim), sx_dummy.dtype, 0., L)
-        keys, subkeys = p_split(keys)
-        x = jax.pmap(jax.random.uniform, static_broadcasted_argnums=(1,2,3,4))(subkeys, (batch_per_device, n, dim), sx_dummy.dtype, 0., L)
+    s, x, params_flow, params_wfn, opt_state = \
+        ckpt["s"], ckpt["x"], ckpt["params_flow"], ckpt["params_wfn"], ckpt["opt_state"]
+   
+    if (s.size == num_devices*device_walker_size*n*dim) and (x.size == num_devices*device_batch_size*n*dim):
+        s = jnp.reshape(s, (num_devices, device_walker_size, n, dim))
+        x = jnp.reshape(x, (num_devices, device_batch_size, n, dim))
+    else: # if sample does not match restart but reuse parameters
         epoch_finished = 0 
 
-    s, x, keys = shard(s), shard(x), shard(keys)
-    params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
 else:
     print("No checkpoint file found. Start from scratch.")
-
     opt_state = optimizer.init((params_flow, params_wfn))
 
-    print("Initialize key and coordinate samples...")
+if epoch_finished == 0:
+    print("Initialize coordinate samples...")
 
-    key, key_proton, key_electron = jax.random.split(key, 3)
+    key, subkey = jax.random.split(key)
+    subkey = jax.random.fold_in(subkey, jax.process_index())
 
-    s = jax.random.uniform(key_proton, (num_devices, walker_per_device, n, dim), minval=0., maxval=L)
-    x = jax.random.uniform(key_electron, (num_devices, batch_per_device, n, dim), minval=0., maxval=L)
-    keys = jax.random.split(key, num_devices)
+    key, key_proton, key_electron = jax.random.split(subkey, 3)
 
-    s, x, keys = shard(s), shard(x), shard(keys)
-    params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
+    s = jax.random.uniform(key_proton, (num_devices, device_walker_size, n, dim), minval=0., maxval=L)
+    x = jax.random.uniform(key_electron, (num_devices, device_batch_size, n, dim), minval=0., maxval=L)
+
+s, x = shard(s), shard(x)
+params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
+keys = make_different_rng_key_on_all_devices(key)
 
 #rerun thermalization steps since we regenerated s and x samples
 if epoch_finished == 0:
@@ -330,10 +338,12 @@ mix_fisher = False
 
 time_of_last_ckpt = time.time()
 log_filename = os.path.join(path, "data.txt")
-f = open(log_filename, "w" if epoch_finished == 0 else "a",
+if jax.process_index() == 0:
+    f = open(log_filename, "w" if epoch_finished == 0 else "a",
             buffering=1, newline="\n")
-if os.path.getsize(log_filename)==0:
-    f.write("epoch f f_err e e_err k k_err vpp vpp_err vep vep_err vee vee_err p p_err s s_err acc_s acc_x\n")
+    if os.path.getsize(log_filename)==0:
+        f.write("epoch f f_err e e_err k k_err vpp vpp_err vep vep_err vee vee_err p p_err s s_err acc_s acc_x\n")
+
 for i in range(epoch_finished + 1, args.epoch + 1):
 
     data_acc = replicate({"K": 0., "K2": 0.,
@@ -394,36 +404,39 @@ for i in range(epoch_finished + 1, args.epoch + 1):
     E_std = jnp.sqrt((E2- E**2) / (args.batchsize*args.acc_steps))
     F_std = jnp.sqrt((F2- F**2) / (args.batchsize*args.acc_steps))
     S_std = jnp.sqrt((S2- S**2) / (args.walkersize*args.acc_steps))
+    
+    if jax.process_index() == 0:
+        # Note the quantities with energy dimension has a prefactor 1/rs^2
+        print("iter: %04d" % i,
+                "F:", F/args.rs**2, "F_std:", F_std/args.rs**2,
+                "E:", E/args.rs**2, "E_std:", E_std/args.rs**2,
+                "K:", K/args.rs**2, "K_std:", K_std/args.rs**2,
+                "S:", S, "S_std:", S_std,
+                "accept_rate:", ar_s, ar_x, 
+                "gnorm:", opt_state["gnorm"]
+                )
+        f.write( ("%6d" + "  %.6f"*16 + "  %.4f"*2 + "\n") % (i,
+                                                    F/n/args.rs**2, F_std/n/args.rs**2,
+                                                    E/n/args.rs**2, E_std/n/args.rs**2,
+                                                    K/n/args.rs**2, K_std/n/args.rs**2,
+                                                    Vpp/n/args.rs**2, Vpp_std/n/args.rs**2,
+                                                    Vep/n/args.rs**2, Vep_std/n/args.rs**2,
+                                                    Vee/n/args.rs**2, Vee_std/n/args.rs**2, # Ry
+                                                    P/args.rs**2, P_std/args.rs**2, # GPa 
+                                                    S/n, S_std/n, 
+                                                    ar_s, ar_x) )
 
-    # Note the quantities with energy dimension has a prefactor 1/rs^2
-    print("iter: %04d" % i,
-            "F:", F/args.rs**2, "F_std:", F_std/args.rs**2,
-            "E:", E/args.rs**2, "E_std:", E_std/args.rs**2,
-            "K:", K/args.rs**2, "K_std:", K_std/args.rs**2,
-            "S:", S, "S_std:", S_std,
-            "accept_rate:", ar_s, ar_x, 
-            "gnorm:", opt_state["gnorm"]
-            )
-    f.write( ("%6d" + "  %.6f"*16 + "  %.4f"*2 + "\n") % (i,
-                                                F/n/args.rs**2, F_std/n/args.rs**2,
-                                                E/n/args.rs**2, E_std/n/args.rs**2,
-                                                K/n/args.rs**2, K_std/n/args.rs**2,
-                                                Vpp/n/args.rs**2, Vpp_std/n/args.rs**2,
-                                                Vep/n/args.rs**2, Vep_std/n/args.rs**2,
-                                                Vee/n/args.rs**2, Vee_std/n/args.rs**2, # Ry
-                                                P/args.rs**2, P_std/args.rs**2, # GPa 
-                                                S/n, S_std/n, 
-                                                ar_s, ar_x) )
+        if time.time() - time_of_last_ckpt > 3600:
+            ckpt = {"s": s, 
+                    "x": x,
+                    "params_flow": jax.tree_map(lambda x: x[0], params_flow),
+                    "params_wfn": jax.tree_map(lambda x: x[0], params_wfn),
+                    "opt_state": opt_state
+                   }
+            ckpt_filename = os.path.join(path, "epoch_%06d.pkl" %(i))
+            checkpoint.save_data(ckpt, ckpt_filename)
+            print("Save checkpoint file: %s" % ckpt_filename)
+            time_of_last_ckpt = time.time()
 
-    if time.time() - time_of_last_ckpt > 3600:
-        ckpt = {"keys": keys, "s": s, "x": x,
-                "params_flow": jax.tree_map(lambda x: x[0], params_flow),
-                "params_wfn": jax.tree_map(lambda x: x[0], params_wfn),
-                "opt_state": opt_state
-               }
-        ckpt_filename = os.path.join(path, "epoch_%06d.pkl" %i)
-        checkpoint.save_data(ckpt, ckpt_filename)
-        print("Save checkpoint file: %s" % ckpt_filename)
-        time_of_last_ckpt = time.time()
-
-f.close()
+if jax.process_index() == 0:
+    f.close()

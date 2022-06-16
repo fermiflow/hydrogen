@@ -13,6 +13,12 @@ def replicate(pytree, num_devices):
     dummy_input = jnp.empty(num_devices)
     return jax.pmap(lambda _: pytree)(dummy_input)
 
+def make_different_rng_key_on_all_devices(rng):
+    """Makes a different PRNG for all Jax devices and processes."""
+    rng = jax.random.fold_in(rng, jax.process_index())
+    rng = jax.random.split(rng, jax.local_device_count())
+    return shard(rng)
+
 def logdet_matmul(xs: Sequence[jnp.ndarray],
                   logw: Optional[jnp.ndarray] = None) -> jnp.ndarray:
   """Combines determinants and takes dot product with weights in log-domain.

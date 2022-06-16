@@ -3,12 +3,12 @@ import time
 import re
 import numpy as np 
 
-nickname = 'ff35520-r-fixk0-backflow'
+nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-multihost'
 
 ###############################
 nlist = [16]
-rslist = [1.44]
-Tlist = [1200]
+rslist = [1.25]
+Tlist = [6000]
 
 dim = 3
 Gmax = 15
@@ -42,10 +42,10 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=a100
-#SBATCH --gres=gpu:1
-#SBATCH --nodes=1
-#SBATCH --time=100:00:00
+#SBATCH --partition=v100
+#SBATCH --nodes=2
+#SBATCH --gres=gpu:2
+#SBATCH --time=1:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
 #SBATCH --error=%s'''%(jobname,logname,logname)
@@ -62,17 +62,38 @@ echo "The current job ID is $SLURM_JOB_ID"
 echo "Running on $SLURM_JOB_NUM_NODES nodes:"
 echo $SLURM_JOB_NODELIST
 echo "Using $SLURM_NTASKS_PER_NODE tasks per node"
-echo "A total of $SLURM_NTASKS tasks is used"
-echo "CUDA devices $CUDA_VISIBLE_DEVICES"\n'''
+echo "A total of $SLURM_NTASKS tasks is used"\n'''
+
+    job +='''
+num_hosts=$SLURM_JOB_NUM_NODES
+
+nodes=$(scontrol show hostnames $SLURM_JOB_NODELIST) # Getting the node names
+nodes_array=( $nodes )
+master=${nodes_array[0]}
+
+ip=$(srun --nodes=1 --ntasks=1 -w $master hostname --ip-address)
+port='6379'
+ip_address=$ip:$port
+'''
 
     job += '''
-echo Job started at `date`\n'''
+echo Job started at `date`\n
+for ((i=0; i<$num_hosts;i++))
+do 
+    node=${nodes_array[$i]}
+    echo "host $i node $node CUDA devices $CUDA_VISIBLE_DEVICES"
+    srun --nodes=1 --ntasks=1 -w $node '''
     job +='python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
-    job += '--sr' 
-    job += '''
-echo Job finished at `date`\n'''
+    job += '--sr ' 
+    job += '--server_addr=$ip_address --num_hosts=$num_hosts --host_idx=$i &'
+    job +='''
+done 
+wait 
+
+echo Job finished at `date`\n
+'''
 
     #print job
     jobfile = open("jobfile", "w")
