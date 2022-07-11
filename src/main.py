@@ -216,9 +216,8 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_clip_%g_alpha_%g"%(args.clip_factor, args.alpha) \
                    + "_ws_%d_bs_%d_accsteps_%d" % (args.walkersize, args.batchsize, args.acc_steps)
 
-if not os.path.isdir(path):
-    os.makedirs(path)
-    print("Create directory: %s" % path)
+os.makedirs(path, exist_ok=True)
+print("Create directory: %s" % path)
 
 ckpt_filename, epoch_finished = checkpoint.find_ckpt_filename(args.restore_path or path)
 
