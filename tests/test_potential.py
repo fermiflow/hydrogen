@@ -41,25 +41,17 @@ def test_madelung():
     madelung = Madelung(dim, kappa, G)
     assert jnp.allclose(madelung, -2.837297)
 
-def test_eward():
-
-    def H2(n, dim, L, d):
-        """ Periodic Hydrogen molecule, aligned along the x axis. """
-        assert n == 2 and dim == 3
-        center = np.array([L/2, L/2, L/2])
-        offset = np.array([[d/2, 0., 0.],
-                        [-d/2, 0., 0.]])
-        xp = center + offset
-        return xp
-    
-    n, dim = 2, 3
+def test_ewald():
+    n, dim = 14, 3
     L, rs = 20.0, 1.0
     Gmax, kappa = 15, 7.0
-    G = kpoints(dim, Gmax)
-    d = 1.4
-    x = H2(n,dim,L,d)
+    
+    key = jax.random.PRNGKey(42)
+    x = jax.random.uniform(key, (n, dim), minval=0.0, maxval=L)
 
-    Vpp = potential_energy(jnp.tile(x,[2,1]), kappa, G, L, rs)[0]
+    G = kpoints(dim, Gmax)
+
+    Vpp = potential_energy(jnp.tile(x,[2,1])[None, :, :], kappa, G, L, rs)[0]
     Vconst = Madelung(dim, kappa, G)*n*rs/L
     print('vpp:', Vpp)
     print('vconst:', Vconst)
@@ -75,6 +67,6 @@ def test_eward():
     cell.a = np.eye(3) * L
     cell.build()
     kmf = scf.khf.KRHF(cell, kpts=G)
-    Vpp_pyscf = kmf.energy_nuc()*2 # Ry
+    Vpp_pyscf = kmf.energy_nuc()*2
     print('pyscf vpp:', Vpp_pyscf)
     jnp.allclose(Vpp+Vconst, Vpp_pyscf)
