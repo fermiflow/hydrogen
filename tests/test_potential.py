@@ -42,7 +42,6 @@ def test_madelung():
     assert jnp.allclose(madelung, -2.837297)
 
 def test_ewald():
-
     n, dim = 14, 3
     L, rs = 20.0, 1.0
     Gmax, kappa = 15, 7.0
@@ -52,7 +51,7 @@ def test_ewald():
 
     G = kpoints(dim, Gmax)
 
-    Vpp = potential_energy(jnp.tile(x,[2,1]), kappa, G, L, rs)[0]
+    Vpp = potential_energy(jnp.tile(x,[2,1])[None, :, :], kappa, G, L, rs)[0]
     Vconst = Madelung(dim, kappa, G)*n*rs/L
     print('vpp:', Vpp)
     print('vconst:', Vconst)
