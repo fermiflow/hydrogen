@@ -103,6 +103,7 @@ key = jax.random.PRNGKey(42)
 
 n, dim = args.n, args.dim
 assert (n%2==0)
+assert (dim==3)
 if args.nk is None:
     nk = n//2 # number of plane wave basis in the envelope function
 else:
@@ -113,10 +114,7 @@ else:
 beta = 157888.088922572/args.T # inverse temperature in unit of 1/Ry
 print ("temperature in Rydberg unit:", 1.0/beta)
 
-if dim == 3:
-    L = (4/3*jnp.pi*n)**(1/3)
-elif dim == 2:
-    L = jnp.sqrt(jnp.pi*n)
+L = (4/3*jnp.pi*n)**(1/3)
 
 print("n = %d, dim = %d, L = %f, rs = %f" % (n, dim, L, args.rs))
 

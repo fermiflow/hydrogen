@@ -27,15 +27,6 @@ def sample_s_and_x(key,
     
     # sample twists 
     twist = jax.random.uniform(key_momenta, (walkersize, dim), minval=-0.5, maxval=0.5)
-    #twist = jnp.zeros((walkersize, dim)) + 0.456
-    #twist = jnp.array([[0.25, 0.25, 0.25],
-    #                  [-0.25, 0.25, 0.25],
-    #                  [0.25, -0.25, 0.25],
-    #                  [0.25, 0.25, -0.25],
-    #                  [-0.25, 0.25, -0.25],
-    #                  [0.25, -0.25, -0.25],
-    #                  [-0.25, -0.25, 0.25],
-    #                  [-0.25, -0.25, -0.25]])
 
     k_up = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) 
     k_dn = 2*jnp.pi/L * (sp_indices[None, :, :] + twist[:, None, :]) # this will cause opposite twist since we do conj 
