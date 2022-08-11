@@ -110,8 +110,7 @@ else:
     nk = args.nk
     assert(nk >= n//2)
 
-# Ry = 157888.088922572 Kelvin
-beta = 157888.088922572/args.T # inverse temperature in unit of 1/Ry
+beta = 157887.66/args.T # inverse temperature in unit of 1/Ry
 print ("temperature in Rydberg unit:", 1.0/beta)
 
 L = (4/3*jnp.pi*n)**(1/3)

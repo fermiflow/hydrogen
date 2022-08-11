@@ -1,7 +1,7 @@
 import matplotlib 
 from matplotlib import rcParams
 
-#rcParams['text.usetex'] = True
+rcParams['text.usetex'] = True
 rcParams['font.serif'] = 'Computer Modern Roman'
 
 rcParams['lines.linewidth'] = 1
