@@ -13,11 +13,12 @@ from utils import make_different_rng_key_on_all_devices
 print("jax.__version__:", jax.__version__)
 
 import argparse
-parser = argparse.ArgumentParser(description="Hydrogen")
+parser = argparse.ArgumentParser(description="Variational free-energy for dense hydrogen")
 
-parser.add_argument("--server_addr", type=str, default="10.1.1.3:9999", help="server ip addr")
+# multihost setup
 parser.add_argument("--num_hosts", type=int, default=1, help="num of hosts")
-parser.add_argument("--host_idx", type=int, default=0, help="index of current host")
+parser.add_argument("--server_addr", type=str, default="10.1.1.3:9999", help="server ip addr, will be used only when num_hosts>1")
+parser.add_argument("--host_idx", type=int, default=0, help="index of current host, will be used onlly when num_hosts>1")
 
 parser.add_argument("--folder", default="../data/", help="the folder to save data")
 parser.add_argument("--restore_path", default=None, help="checkpoint path or file")
@@ -78,7 +79,9 @@ parser.add_argument("--epoch", type=int, default=100000, help="final epoch")
 
 args = parser.parse_args()
 
-jax.distributed.initialize(args.server_addr, args.num_hosts, args.host_idx)
+if args.num_hosts > 1:
+    jax.distributed.initialize(args.server_addr, args.num_hosts, args.host_idx)
+
 print("Cluster connected with totally %d GPUs" % jax.device_count())
 print("This is process %d with %d local GPUs." % (jax.process_index(), jax.local_device_count()))
 
