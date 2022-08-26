@@ -106,9 +106,7 @@ class FermiNet(hk.Module):
             
             mlp = hk.nets.MLP([self.h1_size, self.K*(nk-1)], w_init=hk.initializers.TruncatedNormal(self.init_stddev), activation=jnp.tanh)
             f = jax.nn.softplus(mlp(kpoints[0])).reshape(self.K, nk-1) # twist dependent momentum occupation
-            #f = hk.get_parameter("f", [self.K, nk-1], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             f = jnp.concatenate([jnp.ones((self.K, 1)), f], axis=1) 
-            #f += jnp.concatenate([jnp.ones(n//4), jnp.zeros(nk-n//4)])
 
             D = jnp.einsum('ai,ka,aj->kij', D_up, f, jnp.conjugate(D_dn))
 

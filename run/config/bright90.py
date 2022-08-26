@@ -86,7 +86,6 @@ do
     job +='python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
-    job += '--sr ' 
     job += '--server_addr=$ip_address --num_hosts=$num_hosts --host_idx=$i &'
     job +='''
 done 
