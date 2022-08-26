@@ -13,7 +13,7 @@ Dense hydrogen consists of an equal number of protons and electrons in a box. We
 
 
 
-<img align="middle" src="_assets/concept.pdf" width="500" alt="logo"/>
+<img align="middle" src="_assets/concept.jpg" width="500" alt="logo"/>
 
 
 
