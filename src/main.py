@@ -207,7 +207,7 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \
-                   + ("_lr_%g_%g_decay_%g_damping_%g_%g_norm_%g_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron) \
+                   + "_lr_%g_%g_decay_%g_damping_%g_%g_norm_%g_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron) \
                    + "_clip_%g_alpha_%g"%(args.clip_factor, args.alpha) \
                    + "_ws_%d_bs_%d_accsteps_%d" % (args.walkersize, args.batchsize, args.acc_steps)
 
@@ -287,7 +287,7 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_ac
     grads = grad_params_flow, grad_params_wfn
     grads, classical_score = jax.lax.pmean((grads, classical_score), axis_name="p")
     
-    data_acc, grads_acc, classical_score_acc = jax.tree_multimap(lambda acc, i: acc + i, 
+    data_acc, grads_acc, classical_score_acc = jax.tree_util.tree_map(lambda acc, i: acc + i, 
                                                        (data_acc, grads_acc, classical_score_acc),  
                                                        (data, grads, classical_score))
 
@@ -308,7 +308,7 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_ac
                              (data_acc, grads_acc, classical_score_acc))
         
         grad_params_flow, grad_params_wfn = grads_acc
-        grad_params_flow = jax.tree_multimap(lambda grad, classical_score: 
+        grad_params_flow = jax.tree_util.tree_map(lambda grad, classical_score: 
                                               grad - data_acc["F"] * classical_score,
                                               grad_params_flow, classical_score_acc)
         grads_acc = grad_params_flow, grad_params_wfn
