@@ -21,11 +21,7 @@ def test_sampler():
     x = jnp.array( np.random.uniform(0., L, (n, dim)) )
     params = model.init(key, x)
 
-    from orbitals import sp_orbitals
-    sp_indices, Es = sp_orbitals(dim)
-    sp_indices, Es = jnp.array(sp_indices), jnp.array(Es)
-
-    logprob = make_flow(model, n, dim, L, sp_indices[:n])
+    logprob = make_flow(model, n, dim, L)
 
     logp_scan = logprob(params, x, True)
     logp_no_scan = logprob(params, x, False)

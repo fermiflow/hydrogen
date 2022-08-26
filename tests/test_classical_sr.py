@@ -48,4 +48,3 @@ def test_classical_sr():
     print ('fisher diag', diag, diag.min(), diag.max())
     print (unravel(diag))
 
-test_classical_sr()

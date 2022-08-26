@@ -67,6 +67,5 @@ def test_quantum_sr():
     
     diag = jnp.diag(quantum_fisher)
     print ('fisher diag', diag, diag.min(), diag.max())
-    print (unravel(diag))
 
 test_quantum_sr()
