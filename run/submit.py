@@ -70,6 +70,12 @@ if __name__=='__main__':
                         'alpha': alpha, 
                         'acc_steps': acc_steps,
                         }
+                
+                try:
+                    args['lr_adam'] = lr_adam
+                except NameError:
+                    args['sr'] = ' '
+ 
                 logname = jobdir
                 for key, val in args.items():
                     if key != 'folder':

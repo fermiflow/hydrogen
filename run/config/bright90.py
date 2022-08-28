@@ -18,7 +18,8 @@ wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
 Nf, K = 5, 1
 nk = 33
 
-lr_proton, lr_electron = 1e-3, 1.0
+lr_adam = 1e-2
+lr_proton, lr_electron = 1.0, 1.0
 damping_proton, damping_electron = 1e-3, 1e-3
 maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
 
@@ -44,7 +45,7 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
     job='''#!/bin/bash -l
 #SBATCH --partition=a100
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:A100_80G:1
+#SBATCH --gres=gpu:A100_40G:1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
@@ -86,7 +87,6 @@ do
     job +='python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
-    #job += '--sr ' 
     job += '--server_addr=$ip_address --num_hosts=$num_hosts --host_idx=$i &'
     job +='''
 done 
