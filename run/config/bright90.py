@@ -3,7 +3,7 @@ import time
 import re
 import numpy as np 
 
-nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-multihost'
+nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects'
 
 ###############################
 nlist = [16]
@@ -18,7 +18,7 @@ wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
 Nf, K = 5, 1
 nk = 33
 
-lr_proton, lr_electron = 1.0, 1.0
+lr_proton, lr_electron = 1e-3, 1.0
 damping_proton, damping_electron = 1e-3, 1e-3
 maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
 
@@ -42,10 +42,10 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=v100
-#SBATCH --nodes=2
-#SBATCH --gres=gpu:2
-#SBATCH --time=1:00:00
+#SBATCH --partition=a100
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:A100_80G:1
+#SBATCH --time=100:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
 #SBATCH --error=%s'''%(jobname,logname,logname)
@@ -86,6 +86,7 @@ do
     job +='python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
+    #job += '--sr ' 
     job += '--server_addr=$ip_address --num_hosts=$num_hosts --host_idx=$i &'
     job +='''
 done 

@@ -62,6 +62,7 @@ parser.add_argument("--hutchinson", action='store_true',  help="use Hutchinson's
 # optimizer parameters.
 parser.add_argument("--lr_proton", type=float, default=1e-2, help="initial learning rate")
 parser.add_argument("--lr_electron", type=float, default=1e-2, help="initial learning rate")
+parser.add_argument("--sr", action='store_true',  help="use the second-order stochastic reconfiguration optimizer")
 parser.add_argument("--decay", type=float, default=1e-2, help="learning rate decay")
 parser.add_argument("--damping_proton", type=float, default=1e-3, help="damping")
 parser.add_argument("--damping_electron", type=float, default=1e-3, help="damping")
@@ -181,17 +182,21 @@ logpsi_novmap = make_logpsi(network_wfn, L, nk)
 logpsi2 = make_logpsi2(logpsi_novmap)
 
 ####################################################################################
+
 print("\n========== Initialize optimizer ==========")
 
 import optax
-from sr import hybrid_fisher_sr
-
-classical_score_fn = make_classical_score(logprob_novmap)
-quantum_score_fn = make_quantum_score(logpsi_novmap)
-fishers_fn, optimizer = hybrid_fisher_sr(classical_score_fn, quantum_score_fn,
-        args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron)
-print("Optimizer hybrid_fisher_sr: lr = %g, %g, decay = %g, damping = %g %g, maxnorm = %g %g." %
-        (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron))
+if args.sr:
+    classical_score_fn = make_classical_score(logprob_novmap)
+    quantum_score_fn = make_quantum_score(logpsi_novmap)
+    from sr import hybrid_fisher_sr
+    fishers_fn, optimizer = hybrid_fisher_sr(classical_score_fn, quantum_score_fn,
+            args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron)
+    print("Optimizer hybrid_fisher_sr: lr = %g, %g, decay = %g, damping = %g %g, maxnorm = %g %g." %
+            (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron))
+else:
+    optimizer = optax.adam(args.lr_proton) #TODO use both lr
+    print("Optimizer adam: lr = %g." % args.lr_proton)
 
 ####################################################################################
 
@@ -207,7 +212,8 @@ path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
                    + ("_ht" if args.hutchinson else "") \
-                   + "_lr_%g_%g_decay_%g_damping_%g_%g_norm_%g_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron) \
+                   + ("_lr_%g_%g_decay_%g_damping_%g_%g_norm_%g_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron) \
+                        if args.sr else "_lr_%g" % args.lr_proton) \
                    + "_clip_%g_alpha_%g"%(args.clip_factor, args.alpha) \
                    + "_ws_%d_bs_%d_accsteps_%d" % (args.walkersize, args.batchsize, args.acc_steps)
 
@@ -272,9 +278,11 @@ observable_and_lossfn = make_loss(logprob, logpsi, logpsi_grad_laplacian,
 from functools import partial
 
 @partial(jax.pmap, axis_name="p",
-        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0, 0, 0, None),
-        out_axes=(0, 0, None, 0, 0, 0, 0, 0),  
-        static_broadcasted_argnums=(12,13),
+        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0) +
+                ((0, 0, None, None) if args.sr else (None, None, None, None)),
+        out_axes=(0, 0, None, 0, 0, 0) +
+                ((0, 0) if args.sr else (None, None)),
+        static_broadcasted_argnums=(12,13) if args.sr else (10, 11, 12, 13),
         donate_argnums=(3, 4, 5))
 def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_acc, classical_score_acc,
         classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher):
@@ -291,16 +299,17 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_ac
                                                        (data_acc, grads_acc, classical_score_acc),  
                                                        (data, grads, classical_score))
 
-    classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, ks, s, x, opt_state)
+    if args.sr:
+        classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, ks, s, x, opt_state)
 
-    if mix_fisher:
-        i= opt_state["acc"]
-        # 1/(1-alpha)**(a-1-i) factor to account for the same mixing factor for all acc steps
-        classical_fisher_acc = (1-args.alpha)*classical_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*classical_fisher/args.acc_steps
-        quantum_fisher_acc = (1-args.alpha)*quantum_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*quantum_fisher/args.acc_steps
-    else:
-        classical_fisher_acc += classical_fisher/args.acc_steps
-        quantum_fisher_acc += quantum_fisher/args.acc_steps
+        if mix_fisher:
+            i= opt_state["acc"]
+            # 1/(1-alpha)**(a-1-i) factor to account for the same mixing factor for all acc steps
+            classical_fisher_acc = (1-args.alpha)*classical_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*classical_fisher/args.acc_steps
+            quantum_fisher_acc = (1-args.alpha)*quantum_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*quantum_fisher/args.acc_steps
+        else:
+            classical_fisher_acc += classical_fisher/args.acc_steps
+            quantum_fisher_acc += quantum_fisher/args.acc_steps
 
     if final_step:
         data_acc, grads_acc, classical_score_acc = \
@@ -314,14 +323,17 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_ac
         grads_acc = grad_params_flow, grad_params_wfn
 
         updates, opt_state = optimizer.update(grads_acc, opt_state,
-                                params=(classical_fisher_acc, quantum_fisher_acc))
+                                params=(classical_fisher_acc, quantum_fisher_acc) if args.sr else None)
         params_flow, params_wfn = optax.apply_updates((params_flow, params_wfn), updates)
     
     return params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
             classical_fisher_acc, quantum_fisher_acc
 
-classical_fisher_acc = replicate(jnp.zeros((raveled_params_flow.size, raveled_params_flow.size)), num_devices)
-quantum_fisher_acc = replicate(jnp.zeros((raveled_params_wfn.size, raveled_params_wfn.size)), num_devices)
+if args.sr:
+    classical_fisher_acc = replicate(jnp.zeros((raveled_params_flow.size, raveled_params_flow.size)), num_devices)
+    quantum_fisher_acc = replicate(jnp.zeros((raveled_params_wfn.size, raveled_params_wfn.size)), num_devices)
+else:
+    classical_fisher_acc = quantum_fisher_acc = None
 mix_fisher = False
 
 time_of_last_ckpt = time.time()
@@ -356,7 +368,8 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         ar_x_acc += ar_x/args.acc_steps
 
         final_step = (acc == args.acc_steps - 1)
-        opt_state["acc"] = acc
+        if args.sr:
+            opt_state["acc"] = acc
 
         params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
         classical_fisher_acc, quantum_fisher_acc\
@@ -365,10 +378,6 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         
         # if we have finished a step, we can mix fisher from now on
         if final_step: mix_fisher = True
-
-        #print ('fisher diag', jnp.diag(quantum_fisher_acc[0]).min(), jnp.diag(quantum_fisher_acc[0]).max())
-        #w, _ = jnp.linalg.eigh(quantum_fisher_acc[0])
-        #print ('fisher eigh:', w.min(), w.max())
 
     data = jax.tree_map(lambda x: x[0], data_acc)
     ar_s = ar_s_acc[0] 
@@ -400,8 +409,7 @@ for i in range(epoch_finished + 1, args.epoch + 1):
                 "E:", E/args.rs**2, "E_std:", E_std/args.rs**2,
                 "K:", K/args.rs**2, "K_std:", K_std/args.rs**2,
                 "S:", S, "S_std:", S_std,
-                "accept_rate:", ar_s, ar_x, 
-                "gnorm:", opt_state["gnorm"]
+                "accept_rate:", ar_s, ar_x
                 )
         f.write( ("%6d" + "  %.6f"*16 + "  %.4f"*2 + "\n") % (i,
                                                     F/n/args.rs**2, F_std/n/args.rs**2,
