@@ -6,7 +6,7 @@ import numpy as np
 nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects'
 
 ###############################
-nlist = [16]
+nlist = [32]
 rslist = [1.25]
 Tlist = [6000]
 
@@ -18,12 +18,11 @@ wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
 Nf, K = 5, 1
 nk = 33
 
-lr_adam = 1e-2
 lr_proton, lr_electron = 1.0, 1.0
 damping_proton, damping_electron = 1e-3, 1e-3
 maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
 
-decay = 1e-2
+decay = 1e-3
 clip_factor = 5.0
 alpha = 0.1
 
@@ -33,8 +32,8 @@ mc_electron_steps = 500
 mc_proton_width = 0.02
 mc_electron_width = 0.04
 
-walkersize = 512
-batchsize, acc_steps = 4096, 1
+walkersize = 1024
+batchsize, acc_steps = 8192, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -43,9 +42,9 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=a100
-#SBATCH --nodes=1
-#SBATCH --gres=gpu:A100_40G:1
+#SBATCH --partition=v100
+#SBATCH --nodes=2
+#SBATCH --gres=gpu:8
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
