@@ -1,4 +1,4 @@
-[![Paper](https://img.shields.io/badge/paper-arXiv:2209.XXXXX-B31B1B.svg)](https://arxiv.org/abs/2209.XXXXX)
+[![Paper](https://img.shields.io/badge/paper-arXiv:2209.06095-B31B1B.svg)](https://arxiv.org/abs/2209.06095)
 
 <div align="center">
 <img align="middle" src="_assets/Depositphotos_6284414_XL.jpg" width="500" alt="logo"/>
@@ -37,7 +37,7 @@ python ../src/main.py --T 6000 --rs 1.25 --n 14 --Gmax 15 --flow_steps 1 --flow_
       title={A deep variational free energy approach to dense hydrogen}, 
       author={Hao Xie and Zi-Hang Li and Han Wang and Linfeng Zhang and Lei Wang},
       year={2022},
-      eprint={2209.XXXXX},
+      eprint={2209.06095},
       archivePrefix={arXiv},
       primaryClass={cond-mat.str-el}
 }
