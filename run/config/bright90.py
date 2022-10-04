@@ -3,7 +3,7 @@ import time
 import re
 import numpy as np 
 
-nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects'
+nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-geminal-jastrow'
 
 ###############################
 nlist = [32]
