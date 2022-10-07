@@ -3,7 +3,7 @@ import time
 import re
 import numpy as np 
 
-nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-geminal-jastrow'
+nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-geminal'
 
 ###############################
 nlist = [32]
@@ -18,7 +18,7 @@ wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
 Nf, K = 5, 1
 nk = 33
 
-lr_proton, lr_electron = 1.0, 1.0
+lr_proton, lr_electron = 1.0, 0.05
 damping_proton, damping_electron = 1e-3, 1e-3
 maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
 
@@ -43,7 +43,7 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=v100
-#SBATCH --nodes=2
+#SBATCH --nodes=1
 #SBATCH --gres=gpu:8
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s

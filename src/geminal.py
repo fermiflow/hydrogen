@@ -22,15 +22,14 @@ class Geminal(hk.Module):
         assert (depth >= 2)
         self.depth = depth
         self.h1_size = h1_size
-        self.h2_size = h2_size
         self.Nf = Nf
         self.L = L
         self.K = K
         self.init_stddev = init_stddev
   
         self.fc_e = [hk.Linear(h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
-        self.fc_ee = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
-        self.fc_ep = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
+        self.fc_ee = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth-1)]
+        self.fc_ep = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth-1)]
     
     def _ee_feature(self, x):
         n, dim = x.shape[0], x.shape[1]
@@ -80,7 +79,7 @@ class Geminal(hk.Module):
         ee = self._ee_feature(x) 
         ep = self._ep_feature(x, s)
 
-        for d in range(self.depth):
+        for d in range(self.depth-1):
 
             f = self._combine(e, ee, ep)
             e_update = jnp.tanh(self.fc_e[d](f))
@@ -96,10 +95,15 @@ class Geminal(hk.Module):
                 ee = ee_update
                 ep = ep_update
 
+        f = self._combine(e, ee, ep)
+        e = jnp.tanh(self.fc_e[-1](f)) + e
+
+        '''
         #jastrow
         u = hk.get_parameter("u", [self.K, self.h2_size], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
         v = hk.get_parameter("v", [self.K, self.h2_size], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
         jastrow = jnp.einsum("ka,ija->k", u, ee) + jnp.einsum("ka,ija->k", v, ep)
+        '''
 
         #geminal orbital
         orb_fn = hk.Linear(self.h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev))
@@ -122,6 +126,6 @@ class Geminal(hk.Module):
 
         D = jnp.einsum('ai,ka,aj->kij', D_up, f, jnp.conjugate(D_dn))
 
-        phase, logabsdet = logdet_matmul([D*phi], jastrow)
+        phase, logabsdet = logdet_matmul([D*phi])
         
         return logabsdet + jnp.log(phase)  
