@@ -7,9 +7,9 @@ import pytest
 key = jax.random.PRNGKey(42)
 
 def fermiflow(depth, spsize, tpsize, Nf, L, n, dim, K, nk):
-    from ferminet import FermiNet
+    from geminal import Geminal
     def flow_fn(x, k):
-        model = FermiNet(depth, spsize, tpsize, Nf, L, K)
+        model = Geminal(depth, spsize, tpsize, Nf, L, K)
         return model(x, k)
     flow = hk.transform(flow_fn)
 

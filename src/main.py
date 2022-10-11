@@ -167,9 +167,9 @@ logprob = jax.vmap(logprob_novmap, (None, 0), 0)
 ####################################################################################
 
 print("\n========== Initialize wavefunction ==========")
-
+from geminal import Geminal
 def forward_fn(x, k):
-    model = FermiNet(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K)
+    model = Geminal(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K)
     return model(x, k)
 network_wfn = hk.transform(forward_fn)
 sx_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
