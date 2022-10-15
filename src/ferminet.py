@@ -95,7 +95,7 @@ class FermiNet(hk.Module):
             orb = orb_fn(h1[n//2:].astype(jnp.complex128))
 
             w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
-            phi = jnp.einsum("ia,kab,jb->kij", orb[:n//4], w, orb[n//4:]) \
+            phi = jnp.einsum("ia,kab,jb->kij", orb[:n//4], w, jnp.conjugate(orb[n//4:])) \
                  +jnp.ones((n//4,n//4))[None, :, :]
 
             #geminal envelope
