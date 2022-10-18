@@ -310,8 +310,9 @@ def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_ac
 
         if mix_fisher:
             i= opt_state["acc"]
-            # 1/(1-alpha)**(a-1-i) factor to account for the same mixing factor for all acc steps
-            classical_fisher_acc = (1-args.alpha)*classical_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*classical_fisher/args.acc_steps
+            #account for the same mixing factor for all acc steps
+            classical_fisher_acc = (1-args.alpha)**(1/args.acc_steps)*classical_fisher_acc \
+                + args.alpha/(1-args.alpha)**((args.acc_steps-1-i)/args.acc_steps)*classical_fisher/args.acc_steps
             quantum_fisher_acc = (1-args.alpha)*quantum_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*quantum_fisher/args.acc_steps
         else:
             classical_fisher_acc += classical_fisher/args.acc_steps

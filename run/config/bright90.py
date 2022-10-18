@@ -3,7 +3,7 @@ import time
 import re
 import numpy as np 
 
-nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-conj'
+nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-real'
 
 ###############################
 nlist = [32]
@@ -14,11 +14,11 @@ dim = 3
 Gmax = 15
 
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 32, 16
-wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
-Nf, K = 5, 1
+wfn_depth, wfn_h1size, wfn_h2size = 4, 32, 16
+Nf, K = 1, 1
 nk = 33
 
-lr_proton, lr_electron = 1.0, 1.0
+lr_proton, lr_electron = 0.05, 0.05
 damping_proton, damping_electron = 1e-3, 1e-3
 maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
 
