@@ -67,8 +67,10 @@ def psi(rij, kappa, G, forloop=True):
     potential = V_shortrange + V_longrange
     return potential
 
-@partial(jax.vmap, in_axes=(0, None, None, None, None), out_axes=0)
-def potential_energy(x, kappa, G, L, rs):
+@partial(jax.vmap, in_axes=(0, 0, None, None, None, None), out_axes=0)
+@partial(jax.vmap, in_axes=(0, 0, None, None, None, None), out_axes=0)
+@partial(jax.vmap, in_axes=(None, 0, None, None, None, None), out_axes=0)
+def potential_energy(xp, xe, kappa, G, L, rs):
     """
         Potential energy for a periodic box of size L, only the nontrivial
     coordinate-dependent part. Unit: Ry/rs^2.
@@ -76,9 +78,13 @@ def potential_energy(x, kappa, G, L, rs):
     add the term n*rs/L*Vconst. See also the docstring for function `psi`.
 
     INPUTS: 
-        x: (n, dim) proton + electron coordinates
+        xp: (T, W, n, dim) 
+        xe: (T, W, B, n, dim)
+    OUTPUTS:
+        (T, W, B)
     """
-
+    
+    x = jnp.concatenate((xp, xe), axis=0)
     n, dim = x.shape
 
     x -= L * jnp.floor(x/L)
@@ -87,9 +93,6 @@ def potential_energy(x, kappa, G, L, rs):
     rij -= jnp.rint(rij)
     
     Z = jnp.concatenate([jnp.ones(n//2), -jnp.ones(n//2)])
-
-    #Zij = (Z[:, None] * Z)[i,j]
-    # return 2*rs/L * jnp.sum( Zij * jax.vmap(psi, (0, None, None), 0)(rij, kappa, G) )
 
     total_charge = (Z[:, None]+Z )[i, j]
 

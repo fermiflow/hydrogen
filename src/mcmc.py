@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from functools import partial
 
@@ -10,8 +11,8 @@ def mcmc(logp_fn, x_init, key, mc_steps, mc_width=0.02):
 
     INPUT:
         logp_fn: callable that evaluate log-probability of a batch of configuration x.
-            The signature is logp_fn(x), where x has shape (batch, n, dim).
-        x_init: initial value of x, with shape (batch, n, dim).
+            The signature is logp_fn(x), where x has shape (..., n, dim).
+        x_init: initial value of x, with shape (..., n, dim).
         key: initial PRNG key.
         mc_steps: total number of Monte Carlo steps.
         mc_width: size of the Monte Carlo proposal.
@@ -29,7 +30,7 @@ def mcmc(logp_fn, x_init, key, mc_steps, mc_width=0.02):
         ratio = jnp.exp((logp_proposal - logp))
         accept = jax.random.uniform(key_accept, ratio.shape) < ratio
 
-        x_new = jnp.where(accept[:, None, None], x_proposal, x)
+        x_new = jnp.where(accept[..., None, None], x_proposal, x)
         logp_new = jnp.where(accept, logp_proposal, logp)
         num_accepts += accept.sum()
         return x_new, logp_new, key, num_accepts
@@ -37,6 +38,6 @@ def mcmc(logp_fn, x_init, key, mc_steps, mc_width=0.02):
     logp_init = logp_fn(x_init)
 
     x, logp, key, num_accepts = jax.lax.fori_loop(0, mc_steps, step, (x_init, logp_init, key, 0.))
-    batch = x.shape[0]
+    batch = np.prod( x.shape[:-2] )
     accept_rate = jax.lax.pmean(num_accepts / (mc_steps * batch), axis_name="p")
     return x, accept_rate

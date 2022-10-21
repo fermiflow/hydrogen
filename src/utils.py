@@ -61,3 +61,14 @@ def logdet_matmul(xs: Sequence[jnp.ndarray],
   sign_out = result/jnp.abs(result)
   log_out = jnp.log(jnp.abs(result)) + maxlogdet
   return sign_out, log_out
+
+def monkhorstpack(size):
+    """Generates a Monkhorst-Pack grid of points of order (n1,n2,n3).
+    The points are generated in the open cube
+    ]-1/2,1/2[ x ]-1/2,1/2[ x ]-1/2,1/2[/
+    same as cell.make_kpts([n1, n2, n3], with_gamma_point=False)/(2*np.pi) in p
+    """
+    kpts = jnp.swapaxes(jnp.indices(size, jnp.float64), 0, 3)
+    kpts = jnp.reshape(kpts, (-1, 3))
+    half = jnp.array([0.5, 0.5, 0.5])
+    return (kpts + half) / jnp.array(size) - half

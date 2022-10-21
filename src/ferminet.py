@@ -99,11 +99,11 @@ class FermiNet(hk.Module):
                  +jnp.ones((n//4,n//4))[None, :, :]
 
             #geminal envelope
-            nk = kpoints.shape[0]//2
             z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
-            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
-            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
+            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:, None, :] * z[None, :n//4, :]).sum(axis=-1))
+            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
+            nk = kpoints.shape[0]
             mlp = hk.nets.MLP([self.h1_size, self.K*(nk-1)], w_init=hk.initializers.TruncatedNormal(self.init_stddev), activation=jnp.tanh)
             f = jax.nn.softplus(mlp(kpoints[0])).reshape(self.K, nk-1) # twist dependent momentum occupation
             f = jnp.concatenate([jnp.ones((self.K, 1)), f], axis=1) 

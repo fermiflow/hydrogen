@@ -33,9 +33,9 @@ optimization algorithm based on classical Fisher information matrix.
 Relevant dimension: (after vmapped)
 
 INPUT:
-    params: a pytree    sample: (batch, n), with elements being integers in [0, num_states).
+    params: a pytree    sample: (T, W, n, dim)
 OUTPUT:
     a pytree of the same structure as `params`, in which each leaf node has
 an additional leading batch dimension.
 """
-make_classical_score = lambda log_prob: jax.vmap(jax.grad(log_prob), (None, 0), 0)
+make_classical_score = lambda log_prob: jax.vmap(jax.vmap(jax.grad(log_prob), (None, 0), 0), (None, 0), 0)

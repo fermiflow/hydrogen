@@ -47,11 +47,12 @@ def test_ewald():
     Gmax, kappa = 15, 7.0
     
     key = jax.random.PRNGKey(42)
+    s = jax.random.uniform(key, (n, dim), minval=0.0, maxval=L)
     x = jax.random.uniform(key, (n, dim), minval=0.0, maxval=L)
 
     G = kpoints(dim, Gmax)
 
-    Vpp = potential_energy(jnp.tile(x,[2,1])[None, :, :], kappa, G, L, rs)[0]
+    Vpp, _, _ = potential_energy(s[None, None, ...], x[None, None, None, ...], kappa, G, L, rs)
     Vconst = Madelung(dim, kappa, G)*n*rs/L
     print('vpp:', Vpp)
     print('vconst:', Vconst)

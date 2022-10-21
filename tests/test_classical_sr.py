@@ -16,7 +16,8 @@ def test_classical_sr():
     model = hk.transform(flow_fn)
 
     n, dim = 14, 3
-    B = 128 
+    T = 4 
+    W = 128 
 
     key = jax.random.PRNGKey(42)
     s = jnp.array( np.random.uniform(0., L, (n, dim)) )
@@ -29,22 +30,10 @@ def test_classical_sr():
 
     classical_score_fn = make_classical_score(logprob_novmap)
     
-    s = jax.random.uniform(key, (B, n, dim), minval=0, maxval=L)
+    s = jax.random.uniform(key, (T, W, n, dim), minval=0, maxval=L)
     classical_score = classical_score_fn(params, s)
-    classical_score = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(classical_score)
+    classical_score = jax.vmap(jax.vmap(lambda pytree: ravel_pytree(pytree)[0]))(classical_score)
 
     print ('classical_score', classical_score.shape)
-    assert (classical_score.shape == (B, nparams))
-
-    classical_fisher = classical_score.T.dot(classical_score).real /B 
-
-    classical_score_mean = classical_score.mean(axis=0) 
-    classical_fisher -= classical_score_mean[:, None] * classical_score_mean
-
-    w, _ = jnp.linalg.eigh(classical_fisher)
-    print ('fisher eigh', w, w.min(), w.max())
-    
-    diag = jnp.diag(classical_fisher)
-    print ('fisher diag', diag, diag.min(), diag.max())
-    print (unravel(diag))
+    assert (classical_score.shape == (T, W, nparams))
 
