@@ -129,10 +129,12 @@ device_twist_size = (args.twists**dim) // (num_devices * num_hosts)
 
 twist = monkhorstpack([args.twists]*dim) # (args.twists**dim, dim) = (T, dim)
 k = 2*jnp.pi/L * (sp_indices[None, :nk, :] + twist[:, None, :])  #(T, nk, dim)
-k = jnp.reshape(k, (num_devices, device_twist_size, nk, dim)) # (D, T/D, nk, dim)
+k = jnp.reshape(k, (num_hosts, num_devices, device_twist_size, nk, dim)) # (H, D, T/(H*D), nk, dim)
+k = k[jax.process_index()]
 k = shard(k)
 
 print ("total number of twists", (args.twists**dim))
+print ("host", jax.process_index(), 'twist', k[0])
 
 ####################################################################################
 print("\n========== Initialize relevant quantities for Ewald summation ==========")
@@ -387,14 +389,18 @@ for i in range(epoch_finished + 1, args.epoch + 1):
             data["F"], data["F2"], \
             data["S"], data["S2"]
 
-    K_std = jnp.sqrt((K2- K**2) / (args.batchsize*args.acc_steps))
-    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (args.walkersize*args.acc_steps))
-    Vep_std = jnp.sqrt((Vep2- Vep**2) / (args.batchsize*args.acc_steps))
-    Vee_std = jnp.sqrt((Vee2- Vee**2) / (args.batchsize*args.acc_steps))
-    P_std = jnp.sqrt((P2- P**2) / (args.batchsize*args.acc_steps))
-    E_std = jnp.sqrt((E2- E**2) / (args.batchsize*args.acc_steps))
-    F_std = jnp.sqrt((F2- F**2) / (args.batchsize*args.acc_steps))
-    S_std = jnp.sqrt((S2- S**2) / (args.walkersize*args.acc_steps))
+    T = args.twists**dim
+    W = T *args.walkersize
+    B = W *args.batchsize
+
+    K_std = jnp.sqrt((K2- K**2) / (B*args.acc_steps))
+    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (W*args.acc_steps))
+    Vep_std = jnp.sqrt((Vep2- Vep**2) / (B*args.acc_steps))
+    Vee_std = jnp.sqrt((Vee2- Vee**2) / (B*args.acc_steps))
+    P_std = jnp.sqrt((P2- P**2) / (B*args.acc_steps))
+    E_std = jnp.sqrt((E2- E**2) / (B*args.acc_steps))
+    F_std = jnp.sqrt((F2- F**2) / (B*args.acc_steps))
+    S_std = jnp.sqrt((S2- S**2) / (W*args.acc_steps))
     
     if jax.process_index() == 0:
         # Note the quantities with energy dimension has a prefactor 1/rs^2
