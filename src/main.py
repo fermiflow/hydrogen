@@ -134,7 +134,6 @@ k = k[jax.process_index()]
 k = shard(k)
 
 print ("total number of twists", (args.twists**dim))
-print ("host", jax.process_index(), 'twist', k[0])
 
 ####################################################################################
 print("\n========== Initialize relevant quantities for Ewald summation ==========")
