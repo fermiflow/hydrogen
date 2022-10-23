@@ -42,6 +42,7 @@ if __name__=='__main__':
                         'n':n, 
                         'Gmax':Gmax, 
                         'dim': dim, 
+                        'twists': twists,
                         'flow_steps': flow_steps,
                         'flow_depth': flow_depth, 
                         'flow_h1size': flow_h1size,

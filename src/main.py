@@ -278,26 +278,26 @@ observable_and_lossfn = make_loss(logprob, logpsi, logpsi_grad_laplacian,
 from functools import partial
 
 @partial(jax.pmap, axis_name="p",
-        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0) +
+        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0) +
                 ((0, 0, None, None) if args.sr else (None, None, None, None)),
-        out_axes=(0, 0, None, 0, 0, 0) +
+        out_axes=(0, 0, None, 0, 0) +
                 ((0, 0) if args.sr else (None, None)),
-        static_broadcasted_argnums=(12,13) if args.sr else (10, 11, 12, 13),
+        static_broadcasted_argnums=(11,12) if args.sr else (9, 10, 11, 12),
         donate_argnums=(3, 4, 5))
-def update(params_flow, params_wfn, opt_state, k, s, x, key, data_acc, grads_acc, classical_score_acc,
+def update(params_flow, params_wfn, opt_state, k, s, x, key, data_acc, grads_acc, 
         classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher):
 
     data, classical_lossfn, quantum_lossfn = observable_and_lossfn(
             params_flow, params_wfn, k, s, x, key)
 
-    grad_params_flow, classical_score = jax.jacrev(classical_lossfn)(params_flow)
+    grad_params_flow = jax.grad(classical_lossfn)(params_flow)
     grad_params_wfn = jax.grad(quantum_lossfn)(params_wfn)
     grads = grad_params_flow, grad_params_wfn
-    grads, classical_score = jax.lax.pmean((grads, classical_score), axis_name="p")
+    grads = jax.lax.pmean(grads, axis_name="p")
     
-    data_acc, grads_acc, classical_score_acc = jax.tree_util.tree_map(lambda acc, i: acc + i, 
-                                                       (data_acc, grads_acc, classical_score_acc),  
-                                                       (data, grads, classical_score))
+    data_acc, grads_acc = jax.tree_util.tree_map(lambda acc, i: acc + i, 
+                                                       (data_acc, grads_acc),  
+                                                       (data, grads))
 
     if args.sr:
         classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, k, s, x, opt_state)
@@ -313,15 +313,15 @@ def update(params_flow, params_wfn, opt_state, k, s, x, key, data_acc, grads_acc
             quantum_fisher_acc += quantum_fisher/args.acc_steps
 
     if final_step:
-        data_acc, grads_acc, classical_score_acc = \
+        data_acc, grads_acc = \
                 jax.tree_map(lambda acc: acc / args.acc_steps,
-                             (data_acc, grads_acc, classical_score_acc))
+                             (data_acc, grads_acc))
 
         updates, opt_state = optimizer.update(grads_acc, opt_state,
                                 params=(classical_fisher_acc, quantum_fisher_acc) if args.sr else None)
         params_flow, params_wfn = optax.apply_updates((params_flow, params_wfn), updates)
     
-    return params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
+    return params_flow, params_wfn, opt_state, data_acc, grads_acc,\
             classical_fisher_acc, quantum_fisher_acc
 
 if args.sr:
@@ -350,7 +350,6 @@ for i in range(epoch_finished + 1, args.epoch + 1):
                           "F": 0., "F2": 0.,
                           "S": 0., "S2": 0.}, num_devices)
     grads_acc = shard(jax.tree_map(jnp.zeros_like, (params_flow, params_wfn)))
-    classical_score_acc = shard(jax.tree_map(jnp.zeros_like, params_flow)) 
     ar_s_acc = shard(jnp.zeros(num_devices))
     ar_x_acc = shard(jnp.zeros(num_devices))
 
@@ -366,10 +365,10 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         if args.sr:
             opt_state["acc"] = acc
 
-        params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
+        params_flow, params_wfn, opt_state, data_acc, grads_acc,\
         classical_fisher_acc, quantum_fisher_acc\
             = update(params_flow, params_wfn, opt_state, k, s, x, keys, 
-                     data_acc, grads_acc, classical_score_acc, classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher)
+                     data_acc, grads_acc, classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher)
         
         # if we have finished a step, we can mix fisher from now on
         if final_step: mix_fisher = True
