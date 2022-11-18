@@ -92,7 +92,7 @@ class FermiNet(hk.Module):
             
             #geminal orbital
             orb_fn = hk.Linear(self.h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev))
-            orb = orb_fn(h1[n//2:]) #.astype(jnp.complex128))
+            orb = orb_fn(h1[n//2:].astype(jnp.complex128))
 
             w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             phi = jnp.einsum("ia,kab,jb->kij", orb[:n//4], w, jnp.conjugate(orb[n//4:])) \
