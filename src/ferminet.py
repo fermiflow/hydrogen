@@ -86,22 +86,21 @@ class FermiNet(hk.Module):
 
         if self.K > 0:
 
-            num_heads, key_size = 4, 8
-            mha = hk.MultiHeadAttention(num_heads=num_heads,
-                                        key_size=key_size,
-                                        model_size=self.h1_size,
-                                        w_init=hk.initializers.TruncatedNormal(stddev=self.init_stddev),
-                                       )
-            tag = jnp.concatenate([jnp.zeros(n//2), jnp.ones(n//4), -jnp.ones(n//4)], axis=0)
-            z = jnp.concatenate([h1, tag[:, None]], axis=1)
-            h1 = mha(z, z, z) + h1
-
             #jastrow
-            u = hk.get_parameter("u", [self.K, self.h1_size], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
+            u = hk.get_parameter("u", [self.K, h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             jastrow = jnp.einsum("ka,ia->k", u, h1[:n//2])
             
             #geminal orbital
-            orb_up, orb_dn = h1[n//2:n//2+n//4], h1[n//2+n//4:]
+            num_heads, key_size = 4, 8
+            up, dn = h1[n//2:n//2+n//4], h1[n//2+n//4:]
+            orb_fn = hk.MultiHeadAttention(num_heads=num_heads,
+                                           key_size=key_size,
+                                           model_size=self.h1_size,
+                                           w_init=hk.initializers.TruncatedNormal(stddev=self.init_stddev),
+                                           )
+            orb_up = orb_fn(up, up, up)
+            orb_dn = orb_fn(dn, dn, dn)
+
             w = hk.get_parameter("w", [self.K, self.h1_size], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
             phi = jnp.einsum("ia,ka,ja->kij", orb_up, w, orb_dn) \
                  +jnp.ones((n//4,n//4))[None, :, :]
