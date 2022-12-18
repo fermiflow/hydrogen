@@ -19,30 +19,30 @@ def hybrid_fisher_sr(classical_score_fn, quantum_score_fn, classical_lr, quantum
                 'gnorm': jnp.zeros(2)
                 }
 
-    def fishers_fn(params_van, params_flow, ks, s, x, state):
+    def fishers_fn(params_van, params_flow, k, s, x, state):
 
         classical_score = classical_score_fn(params_van, s)
-        classical_score = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(classical_score)
+        classical_score = jax.vmap(jax.vmap(lambda pytree: ravel_pytree(pytree)[0]))(classical_score)
 
-        quantum_score = quantum_score_fn(x, params_flow, ks)
-        quantum_score = jax.vmap(lambda pytree: ravel_pytree(pytree)[0])(quantum_score)
+        quantum_score = quantum_score_fn(x, params_flow, s, k)
+        quantum_score = jax.vmap(jax.vmap(jax.vmap(lambda pytree: ravel_pytree(pytree)[0])))(quantum_score)
 
-        walkersize, batchsize = classical_score.shape[0], quantum_score.shape[0]
+        T, W, B = quantum_score.shape[0], quantum_score.shape[1] , quantum_score.shape[2]
         print("classical_score.shape:", classical_score.shape)
         print("quantum_score.shape:", quantum_score.shape)
         
         classical_fisher = jax.lax.pmean(
-                    classical_score.T.dot(classical_score) / walkersize,
+                    jnp.einsum("twi,twj->ij", classical_score, classical_score)/(T*W), 
                     axis_name="p")
         
         quantum_fisher = jax.lax.pmean(
-                    quantum_score.conj().T.dot(quantum_score).real / batchsize,  
+                    jnp.einsum("twbi,twbj->ij", quantum_score.conj(), quantum_score).real /(T*W*B), 
                     axis_name="p")
 
-        quantum_score_mean = quantum_score.reshape(walkersize, batchsize//walkersize, -1).mean(axis=1) # (W,Nparams)
+        quantum_score_mean = jnp.mean(quantum_score, axis=2) # (T,W,nparams) 
         factor = 1.- 1./(1+decay*state['step'])
         quantum_fisher -= factor*jax.lax.pmean(
-                    quantum_score_mean.conj().T.dot(quantum_score_mean).real / walkersize,
+                    jnp.einsum("twi,twj->ij", quantum_score_mean.conj(), quantum_score_mean).real/(T*W), 
                     axis_name="p")
 
         return classical_fisher, quantum_fisher

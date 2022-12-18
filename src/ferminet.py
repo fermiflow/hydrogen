@@ -92,18 +92,18 @@ class FermiNet(hk.Module):
             
             #geminal orbital
             orb_fn = hk.Linear(self.h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev))
-            orb = orb_fn(h1[n//2:].astype(jnp.complex128))
+            orb = orb_fn(h1[n//2:]) #.astype(jnp.complex128))
 
             w = hk.get_parameter("w", [self.K, h1.shape[-1], h1.shape[-1]], init=hk.initializers.TruncatedNormal(stddev=self.init_stddev), dtype=x.dtype)
-            phi = jnp.einsum("ia,kab,jb->kij", orb[:n//4], w, orb[n//4:]) \
+            phi = jnp.einsum("ia,kab,jb->kij", orb[:n//4], w, jnp.conjugate(orb[n//4:])) \
                  +jnp.ones((n//4,n//4))[None, :, :]
 
             #geminal envelope
-            nk = kpoints.shape[0]//2
             z = final(h1[n//2:]) + x[n//2:] # backflow coordinates
-            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:nk, None, :] * z[None, :n//4, :]).sum(axis=-1))
-            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[nk:, None, :] * z[None, n//4:, :]).sum(axis=-1))
+            D_up = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:, None, :] * z[None, :n//4, :]).sum(axis=-1))
+            D_dn = 1 / self.L**(dim/2) * jnp.exp(1j * (kpoints[:, None, :] * z[None, n//4:, :]).sum(axis=-1))
             
+            nk = kpoints.shape[0]
             mlp = hk.nets.MLP([self.h1_size, self.K*(nk-1)], w_init=hk.initializers.TruncatedNormal(self.init_stddev), activation=jnp.tanh)
             f = jax.nn.softplus(mlp(kpoints[0])).reshape(self.K, nk-1) # twist dependent momentum occupation
             f = jnp.concatenate([jnp.ones((self.K, 1)), f], axis=1) 

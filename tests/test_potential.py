@@ -41,17 +41,40 @@ def test_madelung():
     madelung = Madelung(dim, kappa, G)
     assert jnp.allclose(madelung, -2.837297)
 
+def test_potential():
+    n, dim = 14, 3
+    L, rs = 20.0, 1.0
+    Gmax, kappa = 15, 7.0
+    T = 4 
+    W = 5 
+    B = 6
+    
+    key = jax.random.PRNGKey(42)
+    s = jax.random.uniform(key, (T, W, n, dim), minval=0.0, maxval=L)
+    x = jax.random.uniform(key, (T, W, B, n, dim), minval=0.0, maxval=L)
+
+    G = kpoints(dim, Gmax)
+
+    vpp, vep, vee = potential_energy(s, x, kappa, G, L, rs)
+
+    assert jnp.allclose(vpp[:, :, 0][:, :, None], vpp)
+    assert(vpp.shape==(T, W, B))
+    assert(vep.shape==(T, W, B))
+    assert(vee.shape==(T, W, B))
+
+
 def test_ewald():
     n, dim = 14, 3
     L, rs = 20.0, 1.0
     Gmax, kappa = 15, 7.0
     
     key = jax.random.PRNGKey(42)
+    s = jax.random.uniform(key, (n, dim), minval=0.0, maxval=L)
     x = jax.random.uniform(key, (n, dim), minval=0.0, maxval=L)
 
     G = kpoints(dim, Gmax)
 
-    Vpp = potential_energy(jnp.tile(x,[2,1])[None, :, :], kappa, G, L, rs)[0]
+    Vpp, _, _ = potential_energy(s[None, None, ...], x[None, None, None, ...], kappa, G, L, rs)
     Vconst = Madelung(dim, kappa, G)*n*rs/L
     print('vpp:', Vpp)
     print('vconst:', Vconst)
@@ -69,4 +92,5 @@ def test_ewald():
     kmf = scf.khf.KRHF(cell, kpts=G)
     Vpp_pyscf = kmf.energy_nuc()*2
     print('pyscf vpp:', Vpp_pyscf)
-    jnp.allclose(Vpp+Vconst, Vpp_pyscf)
+    assert jnp.allclose(Vpp+Vconst, Vpp_pyscf)
+

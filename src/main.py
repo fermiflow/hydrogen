@@ -8,6 +8,8 @@ import time
 
 import checkpoint
 from vmc import sample_s_and_x, make_loss
+from utils import shard, replicate, p_split
+from utils import monkhorstpack
 from utils import make_different_rng_key_on_all_devices
 
 print("jax.__version__:", jax.__version__)
@@ -56,9 +58,6 @@ parser.add_argument("--mc_electron_steps", type=int, default=50, help="MCMC upda
 parser.add_argument("--mc_proton_width", type=float, default=0.01, help="standard deviation of the Gaussian proposal in MCMC update")
 parser.add_argument("--mc_electron_width", type=float, default=0.05, help="standard deviation of the Gaussian proposal in MCMC update")
 
-# technical miscellaneous
-parser.add_argument("--hutchinson", action='store_true',  help="use Hutchinson's trick to compute the laplacian")
-
 # optimizer parameters.
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--sr", action='store_true',  help="use the second-order stochastic reconfiguration optimizer")
@@ -75,8 +74,9 @@ parser.add_argument("--clip_factor", type=float, default=5.0, help="clip factor 
 parser.add_argument("--alpha", type=float, default=0.1, help="mixing of new fisher matrix")
 
 # training parameters.
-parser.add_argument("--walkersize", type=int, default=16, help="walker size for protons")
-parser.add_argument("--batchsize", type=int, default=2048, help="batch size (per single gradient accumulation step)")
+parser.add_argument("--twists", type=int, default=4, help="twist in each direction")
+parser.add_argument("--walkersize", type=int, default=16, help="walker per twist")
+parser.add_argument("--batchsize", type=int, default=8, help="batch size per walker")
 parser.add_argument("--acc_steps", type=int, default=4, help="gradient accumulation steps")
 parser.add_argument("--epoch", type=int, default=100000, help="final epoch")
 
@@ -90,20 +90,6 @@ print("This is process %d with %d local GPUs." % (jax.process_index(), jax.local
 
 num_devices = jax.local_device_count()
 num_hosts = jax.device_count() // num_devices
-
-if args.batchsize % args.walkersize != 0:
-    raise ValueError("Batch size must be divisible by walkersize. "
-                     "Got batch = %d for %d walkers now." % (args.batchsize, args.walkersize))
-
-if args.walkersize % (num_devices * num_hosts) != 0:
-    raise ValueError("Batch size must be divisible by the number of GPU devices. "
-                         "Got batch = %d for %d devices now." % (args.walkersize, num_devices))
-
-host_batch_size = args.batchsize // num_hosts
-host_walker_size = args.walkersize // num_hosts
-
-device_batch_size = host_batch_size // num_devices  
-device_walker_size = host_walker_size // num_devices 
 
 key = jax.random.PRNGKey(42)
 
@@ -134,13 +120,28 @@ print("beta = %f, Ef = %d"% (beta, Es[n//2-1]))
 
 ####################################################################################
 
+print("\n========== Setup twists ==========")
+
+if (args.twists**dim) % (num_devices * num_hosts) != 0:
+    raise ValueError("Total number of twists size must be divisible by the number of GPU devices. "
+                     "Got twists = %d for %d devices now." % (args.twists**dim, num_devices*num_hosts))
+device_twist_size = (args.twists**dim) // (num_devices * num_hosts)
+
+twist = monkhorstpack([args.twists]*dim) # (args.twists**dim, dim) = (T, dim)
+k = 2*jnp.pi/L * (sp_indices[None, :nk, :] + twist[:, None, :])  #(T, nk, dim)
+k = jnp.reshape(k, (num_hosts, num_devices, device_twist_size, nk, dim)) # (H, D, T/(H*D), nk, dim)
+k = k[jax.process_index()]
+k = shard(k)
+
+print ("total number of twists", (args.twists**dim))
+
+####################################################################################
 print("\n========== Initialize relevant quantities for Ewald summation ==========")
 
 from potential import kpoints, Madelung
 G = kpoints(dim, args.Gmax)
 Vconst = n * args.rs/L * Madelung(dim, args.kappa, G) 
 print("(scaled) Vconst:", Vconst/(n*args.rs/L)) 
-
 
 ####################################################################################
 
@@ -162,18 +163,17 @@ print("#parameters in the flow model: %d" % raveled_params_flow.size)
 
 from sampler import make_flow, make_classical_score
 logprob_novmap = make_flow(network_flow, n, dim, L)
-logprob = jax.vmap(logprob_novmap, (None, 0), 0)
+logprob = jax.vmap(jax.vmap(logprob_novmap, (None, 0), 0), (None, 0), 0)
 
 ####################################################################################
 
 print("\n========== Initialize wavefunction ==========")
-from geminal import Geminal
 def forward_fn(x, k):
-    model = Geminal(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K)
+    model = FermiNet(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K)
     return model(x, k)
 network_wfn = hk.transform(forward_fn)
 sx_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
-k_dummy = jax.random.uniform(key, (2*nk, dim), minval=0, maxval=2*jnp.pi/L)
+k_dummy = jax.random.uniform(key, (nk, dim), minval=0, maxval=2*jnp.pi/L)
 params_wfn = network_wfn.init(key, sx_dummy, k_dummy)
 
 raveled_params_wfn, _ = ravel_pytree(params_wfn)
@@ -181,7 +181,7 @@ print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
 
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, \
                    make_logpsi2, make_quantum_score
-logpsi_novmap = make_logpsi(network_wfn, L, nk)
+logpsi_novmap = make_logpsi(network_wfn)
 logpsi2 = make_logpsi2(logpsi_novmap)
 
 ####################################################################################
@@ -209,16 +209,13 @@ else:
 
 print("\n========== Checkpointing ==========")
 
-from utils import shard, replicate, p_split
-
-path = args.folder + "n_%d_dim_%d_rs_%g_T_%g" % (n, dim, args.rs, args.T) \
+path = args.folder + "n_%d_dim_%d_t_%d_rs_%g_T_%g" % (n, dim, args.twists, args.rs, args.T) \
                    + "_fs_%d_fd_%d_fh1_%d_fh2_%d" % \
                       (args.flow_steps, args.flow_depth, args.flow_h1size, args.flow_h2size) \
                    + "_wd_%d_wh1_%d_wh2_%d_Nf_%d_K_%d_nk_%d" % \
                       (args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, args.K, nk) \
                    + "_Gmax_%d_kappa_%d" % (args.Gmax, args.kappa) \
                    + "_mctherm_%d_mcsteps_%d_%d_mcwidth_%g_%g" % (args.mc_therm, args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width) \
-                   + ("_ht" if args.hutchinson else "") \
                    + ("_lr_%g_%g_decay_%g_damping_%g_%g_norm_%g_%g" % (args.lr_proton, args.lr_electron, args.decay, args.damping_proton, args.damping_electron, args.maxnorm_proton, args.maxnorm_electron) \
                         if args.sr else "_lr_%g_decay_%g" % (args.lr_adam, args.decay)) \
                    + "_clip_%g_alpha_%g"%(args.clip_factor, args.alpha) \
@@ -235,11 +232,8 @@ if ckpt_filename is not None:
     s, x, params_flow, params_wfn, opt_state = \
         ckpt["s"], ckpt["x"], ckpt["params_flow"], ckpt["params_wfn"], ckpt["opt_state"]
    
-    if (s.size == num_devices*device_walker_size*n*dim) and (x.size == num_devices*device_batch_size*n*dim):
-        s = jnp.reshape(s, (num_devices, device_walker_size, n, dim))
-        x = jnp.reshape(x, (num_devices, device_batch_size, n, dim))
-    else: # if sample does not match restart but reuse parameters
-        epoch_finished = 0 
+    s = jnp.reshape(s, (num_devices, device_twist_size, args.walkersize, n, dim))
+    x = jnp.reshape(x, (num_devices, device_twist_size, args.walkersize, args.batchsize, n, dim))
 
 else:
     print("No checkpoint file found. Start from scratch.")
@@ -253,8 +247,8 @@ if epoch_finished == 0:
 
     key, key_proton, key_electron = jax.random.split(subkey, 3)
 
-    s = jax.random.uniform(key_proton, (num_devices, device_walker_size, n, dim), minval=0., maxval=L)
-    x = jax.random.uniform(key_electron, (num_devices, device_batch_size, n, dim), minval=0., maxval=L)
+    s = jax.random.uniform(key_proton, (num_devices, device_twist_size, args.walkersize, n, dim), minval=0., maxval=L)
+    x = jax.random.uniform(key_electron, (num_devices, device_twist_size, args.walkersize, args.batchsize, n, dim), minval=0., maxval=L)
 
 s, x = shard(s), shard(x)
 params_flow, params_wfn = replicate((params_flow, params_wfn), num_devices)
@@ -264,10 +258,10 @@ keys = make_different_rng_key_on_all_devices(key)
 if epoch_finished == 0:
     for i in range(args.mc_therm):
         print("---- thermal step %d ----" % (i+1))
-        keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
+        keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                    logprob, s, params_flow,
                                    logpsi2, x, params_wfn,
-                                   args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices[:nk])
+                                   args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, k)
         print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
     print("x shape:", x.shape, "\t\ttype:", type(x))
@@ -276,8 +270,7 @@ if epoch_finished == 0:
 
 print("\n========== Training ==========")
 
-logpsi, logpsi_grad_laplacian = \
-        make_logpsi_grad_laplacian(logpsi_novmap, hutchinson=args.hutchinson)
+logpsi, logpsi_grad_laplacian = make_logpsi_grad_laplacian(logpsi_novmap)
 
 observable_and_lossfn = make_loss(logprob, logpsi, logpsi_grad_laplacian,
                                   args.kappa, G, L, args.rs, Vconst, beta, args.clip_factor)
@@ -285,55 +278,50 @@ observable_and_lossfn = make_loss(logprob, logpsi, logpsi_grad_laplacian,
 from functools import partial
 
 @partial(jax.pmap, axis_name="p",
-        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0, 0) +
+        in_axes=(0, 0, None, 0, 0, 0, 0, 0, 0) +
                 ((0, 0, None, None) if args.sr else (None, None, None, None)),
-        out_axes=(0, 0, None, 0, 0, 0) +
+        out_axes=(0, 0, None, 0, 0) +
                 ((0, 0) if args.sr else (None, None)),
-        static_broadcasted_argnums=(12,13) if args.sr else (10, 11, 12, 13),
+        static_broadcasted_argnums=(11,12) if args.sr else (9, 10, 11, 12),
         donate_argnums=(3, 4, 5))
-def update(params_flow, params_wfn, opt_state, ks, s, x, key, data_acc, grads_acc, classical_score_acc,
+def update(params_flow, params_wfn, opt_state, k, s, x, key, data_acc, grads_acc, 
         classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher):
 
     data, classical_lossfn, quantum_lossfn = observable_and_lossfn(
-            params_flow, params_wfn, ks, s, x, key)
+            params_flow, params_wfn, k, s, x, key)
 
-    grad_params_flow, classical_score = jax.jacrev(classical_lossfn)(params_flow)
+    grad_params_flow = jax.grad(classical_lossfn)(params_flow)
     grad_params_wfn = jax.grad(quantum_lossfn)(params_wfn)
     grads = grad_params_flow, grad_params_wfn
-    grads, classical_score = jax.lax.pmean((grads, classical_score), axis_name="p")
+    grads = jax.lax.pmean(grads, axis_name="p")
     
-    data_acc, grads_acc, classical_score_acc = jax.tree_util.tree_map(lambda acc, i: acc + i, 
-                                                       (data_acc, grads_acc, classical_score_acc),  
-                                                       (data, grads, classical_score))
+    data_acc, grads_acc = jax.tree_util.tree_map(lambda acc, i: acc + i, 
+                                                       (data_acc, grads_acc),  
+                                                       (data, grads))
 
     if args.sr:
-        classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, ks, s, x, opt_state)
+        classical_fisher, quantum_fisher = fishers_fn(params_flow, params_wfn, k, s, x, opt_state)
 
         if mix_fisher:
             i= opt_state["acc"]
-            # 1/(1-alpha)**(a-1-i) factor to account for the same mixing factor for all acc steps
-            classical_fisher_acc = (1-args.alpha)*classical_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*classical_fisher/args.acc_steps
+            #account for the same mixing factor for all acc steps
+            classical_fisher_acc = (1-args.alpha)**(1/args.acc_steps)*classical_fisher_acc \
+                + args.alpha/(1-args.alpha)**((args.acc_steps-1-i)/args.acc_steps)*classical_fisher/args.acc_steps
             quantum_fisher_acc = (1-args.alpha)*quantum_fisher_acc + args.alpha/(1-args.alpha)**(args.acc_steps-1-i)*quantum_fisher/args.acc_steps
         else:
             classical_fisher_acc += classical_fisher/args.acc_steps
             quantum_fisher_acc += quantum_fisher/args.acc_steps
 
     if final_step:
-        data_acc, grads_acc, classical_score_acc = \
+        data_acc, grads_acc = \
                 jax.tree_map(lambda acc: acc / args.acc_steps,
-                             (data_acc, grads_acc, classical_score_acc))
-        
-        grad_params_flow, grad_params_wfn = grads_acc
-        grad_params_flow = jax.tree_util.tree_map(lambda grad, classical_score: 
-                                              grad - data_acc["F"] * classical_score,
-                                              grad_params_flow, classical_score_acc)
-        grads_acc = grad_params_flow, grad_params_wfn
+                             (data_acc, grads_acc))
 
         updates, opt_state = optimizer.update(grads_acc, opt_state,
                                 params=(classical_fisher_acc, quantum_fisher_acc) if args.sr else None)
         params_flow, params_wfn = optax.apply_updates((params_flow, params_wfn), updates)
     
-    return params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
+    return params_flow, params_wfn, opt_state, data_acc, grads_acc,\
             classical_fisher_acc, quantum_fisher_acc
 
 if args.sr:
@@ -362,15 +350,14 @@ for i in range(epoch_finished + 1, args.epoch + 1):
                           "F": 0., "F2": 0.,
                           "S": 0., "S2": 0.}, num_devices)
     grads_acc = shard(jax.tree_map(jnp.zeros_like, (params_flow, params_wfn)))
-    classical_score_acc = shard(jax.tree_map(jnp.zeros_like, params_flow)) 
     ar_s_acc = shard(jnp.zeros(num_devices))
     ar_x_acc = shard(jnp.zeros(num_devices))
 
     for acc in range(args.acc_steps):
-        keys, ks, s, x, ar_s, ar_x = sample_s_and_x(keys,
+        keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                                logprob, s, params_flow,
                                                logpsi2, x, params_wfn,
-                                               args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, sp_indices[:nk])
+                                               args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, k)
         ar_s_acc += ar_s/args.acc_steps
         ar_x_acc += ar_x/args.acc_steps
 
@@ -378,10 +365,10 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         if args.sr:
             opt_state["acc"] = acc
 
-        params_flow, params_wfn, opt_state, data_acc, grads_acc, classical_score_acc,\
+        params_flow, params_wfn, opt_state, data_acc, grads_acc,\
         classical_fisher_acc, quantum_fisher_acc\
-            = update(params_flow, params_wfn, opt_state, ks, s, x, keys, 
-                     data_acc, grads_acc, classical_score_acc, classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher)
+            = update(params_flow, params_wfn, opt_state, k, s, x, keys, 
+                     data_acc, grads_acc, classical_fisher_acc, quantum_fisher_acc, final_step, mix_fisher)
         
         # if we have finished a step, we can mix fisher from now on
         if final_step: mix_fisher = True
@@ -400,14 +387,18 @@ for i in range(epoch_finished + 1, args.epoch + 1):
             data["F"], data["F2"], \
             data["S"], data["S2"]
 
-    K_std = jnp.sqrt((K2- K**2) / (args.batchsize*args.acc_steps))
-    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (args.walkersize*args.acc_steps))
-    Vep_std = jnp.sqrt((Vep2- Vep**2) / (args.batchsize*args.acc_steps))
-    Vee_std = jnp.sqrt((Vee2- Vee**2) / (args.batchsize*args.acc_steps))
-    P_std = jnp.sqrt((P2- P**2) / (args.batchsize*args.acc_steps))
-    E_std = jnp.sqrt((E2- E**2) / (args.batchsize*args.acc_steps))
-    F_std = jnp.sqrt((F2- F**2) / (args.batchsize*args.acc_steps))
-    S_std = jnp.sqrt((S2- S**2) / (args.walkersize*args.acc_steps))
+    T = args.twists**dim
+    W = T *args.walkersize
+    B = W *args.batchsize
+
+    K_std = jnp.sqrt((K2- K**2) / (B*args.acc_steps))
+    Vpp_std = jnp.sqrt((Vpp2- Vpp**2) / (W*args.acc_steps))
+    Vep_std = jnp.sqrt((Vep2- Vep**2) / (B*args.acc_steps))
+    Vee_std = jnp.sqrt((Vee2- Vee**2) / (B*args.acc_steps))
+    P_std = jnp.sqrt((P2- P**2) / (B*args.acc_steps))
+    E_std = jnp.sqrt((E2- E**2) / (B*args.acc_steps))
+    F_std = jnp.sqrt((F2- F**2) / (B*args.acc_steps))
+    S_std = jnp.sqrt((S2- S**2) / (W*args.acc_steps))
     
     if jax.process_index() == 0:
         # Note the quantities with energy dimension has a prefactor 1/rs^2

@@ -3,28 +3,29 @@ import time
 import re
 import numpy as np 
 
-nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-geminal-jastrow'
+nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-real-twist'
 
 ###############################
-nlist = [32]
+nlist = [54]
 rslist = [1.25]
 Tlist = [6000]
 
 dim = 3
 Gmax = 15
 
+twists = 4
 flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 32, 16
-wfn_depth, wfn_h1size, wfn_h2size = 3, 32, 16
-Nf, K = 5, 1
-nk = 33
+wfn_depth, wfn_h1size, wfn_h2size = 4, 32, 16
+Nf, K = 1, 1
+nk = 57
 
-lr_proton, lr_electron = 1.0, 1.0
+lr_proton, lr_electron = 0.05, 0.05
 damping_proton, damping_electron = 1e-3, 1e-3
 maxnorm_proton, maxnorm_electron = 1e-3, 1e-3
 
 decay = 1e-3
 clip_factor = 5.0
-alpha = 0.1
+alpha = 0.05
 
 mc_proton_steps = 50
 mc_electron_steps = 500
@@ -32,8 +33,7 @@ mc_electron_steps = 500
 mc_proton_width = 0.02
 mc_electron_width = 0.04
 
-walkersize = 1024
-batchsize, acc_steps = 8192, 1
+walkersize, batchsize, acc_steps = 8, 8, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 

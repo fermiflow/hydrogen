@@ -3,9 +3,9 @@ import jax.numpy as jnp
 
 from functools import partial
 
-def make_logpsi(flow, L, nk):
+def make_logpsi(flow):
 
-    def logpsi(x, params, ks):
+    def logpsi(x, params, s, k):
 
         """
             Generic function that computes ln Psi(x) given momenta `k` and proton position
@@ -13,14 +13,13 @@ def make_logpsi(flow, L, nk):
 
         INPUT:
             x: (n, dim)     
-            ks: (2*nk+n, dim)
+            s: (n, dim)
+            k: (nk, dim)
 
         OUTPUT:
             a single complex number ln Psi(x), given in the form of a 2-tuple (real, imag).
         """
         
-        n, dim = x.shape
-        k, s = jnp.split(ks, [2*nk])
         log_phi = flow.apply(params, None, jnp.concatenate([s, x]), k)
     
         return jnp.stack([log_phi.real,
@@ -28,15 +27,19 @@ def make_logpsi(flow, L, nk):
 
     return logpsi
 
-def make_logpsi_grad_laplacian(logpsi, forloop=True, hutchinson=False):
+def make_logpsi_grad_laplacian(logpsi, forloop=True):
 
-    @partial(jax.vmap, in_axes=(0, None, 0), out_axes=0)
-    def logpsi_vmapped(x, params, s):
-        logpsix = logpsi(x, params, s)
+    @partial(jax.vmap, in_axes=(0, None, 0, 0), out_axes=0) # T
+    @partial(jax.vmap, in_axes=(0, None, 0, None), out_axes=0) # W
+    @partial(jax.vmap, in_axes=(0, None, None, None), out_axes=0) # B
+    def logpsi_vmapped(x, params, s, k):
+        logpsix = logpsi(x, params, s, k)
         return logpsix[0] + 1j * logpsix[1]
 
-    @partial(jax.vmap, in_axes=(0, None, 0, None), out_axes=0)
-    def logpsi_grad_laplacian(x, params, s, key):
+    @partial(jax.vmap, in_axes=(0, None, 0, 0), out_axes=0) # T
+    @partial(jax.vmap, in_axes=(0, None, 0, None), out_axes=0) # W
+    @partial(jax.vmap, in_axes=(0, None, None, None), out_axes=0) # B
+    def logpsi_grad_laplacian(x, params, s, k):
         """
             Computes the gradient and laplacian of logpsi w.r.t. electron coordinates x.
         The final result is in complex form.
@@ -44,18 +47,20 @@ def make_logpsi_grad_laplacian(logpsi, forloop=True, hutchinson=False):
         Relevant dimensions: (after vmapped)
 
         INPUT:
-            x: (batch, n, dim)  s: (batch, n, dim)
+            x: (T, W, B, n, dim)  
+            s: (T, W, n, dim)
+            k: (T, nk, dim)
         OUTPUT:
-            grad: (batch, n, dim)   laplacian: (batch,)
+            grad: (T, W, B, n, dim)   laplacian: (T, W, B,)
         """
 
-        grad = jax.jacrev(logpsi)(x, params, s)
+        grad = jax.jacrev(logpsi)(x, params, s, k)
         grad = grad[0] + 1j * grad[1]
         print("Computed gradient.")
 
         n, dim = x.shape
         x_flatten = x.reshape(-1)
-        grad_logpsi = jax.jacrev(lambda x: logpsi(x.reshape(n, dim), params, s))
+        grad_logpsi = jax.jacrev(lambda x: logpsi(x.reshape(n, dim), params, s, k))
 
         def _laplacian(x):
             if forloop:
@@ -80,50 +85,28 @@ def make_logpsi_grad_laplacian(logpsi, forloop=True, hutchinson=False):
 
         return grad, laplacian
 
-    def logpsi_grad_laplacian_hutchinson(x, params, s, key):
-
-        v = jax.random.normal(key, x.shape)
-
-        @partial(jax.vmap, in_axes=(0, None, 0, 0), out_axes=0)
-        def logpsi_grad_random_laplacian(x, params, s, v):
-            """
-                Compute the laplacian as a random variable `v^T hessian(ln Psi_n(x)) v`
-            using the Hutchinson's trick.
-
-                The argument `v` is a random "vector" that has the same shape as `x`,
-            i.e., (after vmapped) (batch, n, dim).
-            """
-
-            grad, hvp = jax.jvp( jax.jacrev(lambda x: logpsi(x, params, s)),
-                                 (x,), (v,) )
-
-            grad = grad[0] + 1j * grad[1]
-            print("Computed gradient.")
-
-            random_laplacian = (hvp * v).sum(axis=(-2, -1))
-            random_laplacian = random_laplacian[0] + 1j * random_laplacian[1]
-            print("Computed Hutchinson's estimator of laplacian.")
-
-            return grad, random_laplacian
-
-        logpsi_grad_laplacian = logpsi_grad_random_laplacian 
-        return logpsi_grad_laplacian(x, params, s, v)
-
-    return logpsi_vmapped, \
-           (logpsi_grad_laplacian_hutchinson if hutchinson else logpsi_grad_laplacian)
+    return logpsi_vmapped, logpsi_grad_laplacian
 
 def make_logpsi2(logpsi):
     
-    @partial(jax.vmap, in_axes=(0, None, 0), out_axes=0)
-    def logpsi2(x, params, s):
-        """ logp = logpsi + logpsi* = 2 Re logpsi """
-        return 2 * logpsi(x, params, s)[0]
+    @partial(jax.vmap, in_axes=(0, None, 0, 0), out_axes=0) # T
+    @partial(jax.vmap, in_axes=(0, None, 0, None), out_axes=0) # W
+    @partial(jax.vmap, in_axes=(0, None, None, None), out_axes=0) # B
+    def logpsi2(x, params, s, k):
+        """ logp = logpsi + logpsi* = 2 Re logpsi 
+        x: (T, W, B, n, dim)
+        s: (T, W, n, dim)
+        k: (T, nk, dim)
+        """
+        return 2 * logpsi(x, params, s, k)[0]
     return logpsi2
 
 def make_quantum_score(logpsi):
 
-    @partial(jax.vmap, in_axes=(0, None, 0), out_axes=0)
-    def quantum_score_fn(x, params, s):
+    @partial(jax.vmap, in_axes=(0, None, 0, 0), out_axes=0) # T
+    @partial(jax.vmap, in_axes=(0, None, 0, None), out_axes=0) # W
+    @partial(jax.vmap, in_axes=(0, None, None, None), out_axes=0) # B
+    def quantum_score_fn(x, params, s, k):
         """
             Computes the "quantum score function", i.e., the gradient of ln Psi_n(x)
         w.r.t. the flow parameters.
@@ -137,7 +120,7 @@ def make_quantum_score(logpsi):
             a pytree of the same structure as `params`, in which each leaf node has
         an additional leading batch dimension.
         """
-        grad_params = jax.jacrev(logpsi, argnums=1)(x, params, s)
+        grad_params = jax.jacrev(logpsi, argnums=1)(x, params, s, k)
         return jax.tree_map(lambda jac: jac[0] + 1j * jac[1], grad_params)
 
     return quantum_score_fn
