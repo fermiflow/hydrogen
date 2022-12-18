@@ -10,6 +10,7 @@ def parse_filename(f):
     n = _parse(int, 'n_([0-9]*)', f)
 
     dim = _parse(int, '_dim_([0-9]*)', f)
+    t = _parse(int, '_t_([0-9]*)', f)
     rs = _parse(float, '_rs_([0-9]*\.?[0-9]*)', f)
     T = _parse(float, '_T_([0-9]*\.?[0-9]*)', f)
 
@@ -21,6 +22,8 @@ def parse_filename(f):
     wd =  _parse(int, '_wd_([0-9]*)', f)
     wh1 = _parse(int, '_wh1_([0-9]*)', f)
     wh2 = _parse(int, '_wh2_([0-9]*)', f)
+
+    nk = _parse(int, '_nk_([0-9]*)', f)
 
     clip = _parse(float, '_clip_([0-9]*\.?[0-9]*)', f)
     lr = _parse(float, '_lr_([0-9]*\.?[0-9]*)', f)
@@ -36,7 +39,7 @@ def parse_filename(f):
 
     acc = _parse(int, '_accsteps_([0-9]*)', f)
 
-    return n, dim, rs, T, s, fd, fh1, fh2, wd, wh1, wh2, b, acc, lr, decay, eta, maxnorm, Nf, clip, K, w
+    return n, dim, rs, T, s, fd, fh1, fh2, wd, wh1, wh2, b, acc, lr, decay, eta, maxnorm, Nf, clip, K, w, nk, t
 
 def natural_sort(l):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
