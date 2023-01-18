@@ -21,11 +21,11 @@ parser = argparse.ArgumentParser(description="Density estimation for dense hydro
 parser.add_argument("--folder", default="../data/", help="the folder to save data")
 parser.add_argument("--dataset", default="../data/position.dat",help="The path to training dataset")
 parser.add_argument("--lr", type=float, default=1e-3, help="initial learning rate of adam")
-parser.add_argument("--batchsize", type=int, default=100, help="batch size")
+parser.add_argument("--batchsize", type=int, default=10, help="batch size")
 parser.add_argument("--epoch", type=int, default=10000, help="final epoch")
 
-parser.add_argument("--depth", type=int, default=2, help="FermiNet: network depth")
-parser.add_argument("--h1size", type=int, default=16, help="FermiNet: single-particle feature size")
+parser.add_argument("--depth", type=int, default=4, help="FermiNet: network depth")
+parser.add_argument("--h1size", type=int, default=32, help="FermiNet: single-particle feature size")
 parser.add_argument("--h2size", type=int, default=16, help="FermiNet: two-particle feature size")
 parser.add_argument("--Nf", type=int, default=5, help="FermiNet: number of fequencies")
 
@@ -33,6 +33,7 @@ parser.add_argument("--restore_path", default=None, help="checkpoint path or fil
 parser.add_argument("--mc_therm", type=int, default=10, help="mcmc therm steps for inference")
 parser.add_argument("--mc_steps", type=int, default=100, help="mcmc steps for inference")
 parser.add_argument("--mc_width", type=float, default=0.02, help="mcmc width for inference")
+parser.add_argument("--hotinit", action='store_true',  help="hot initilization")
 
 args = parser.parse_args()
 
@@ -69,7 +70,7 @@ logp_fn = jax.vmap(logp_fn, (None, 0), 0)
 loss_fn = make_loss(logp_fn)
 value_and_grad = jax.value_and_grad(loss_fn)
 
-path = args.folder + "ds_n_%d_dim_%d_lr_%g" % (n, dim, args.lr) 
+path = args.folder + "ds_n_%d_dim_%d_d_%g_h1_%g_h2_%g_lr_%g" % (n, dim, args.depth, args.h1size, args.h2size, args.lr) 
 os.makedirs(path, exist_ok=True)
 print("Create directory: %s" % path)
 
@@ -85,9 +86,12 @@ if args.restore_path:
     else:
         raise ValueError("no checkpoint found")
     
-    #key, subkey = jax.random.split(key)
-    #x = jax.random.uniform(subkey, (args.batchsize, n, dim), minval=0, maxval=L)
-    x = data[:args.batchsize] # start from data so we do not suffer from thermaliation issue
+    if args.hotinit:
+        key, subkey = jax.random.split(key)
+        x = jax.random.uniform(subkey, (args.batchsize, n, dim), minval=0, maxval=L)
+    else:
+        x = data[:args.batchsize] # start from data so we do not suffer from thermaliation issue
+
     for i in range(args.mc_therm):
         key, subkey = jax.random.split(key)
         x, acc_rate = mcmc(lambda x: logp_fn(params, x), x, subkey, args.mc_steps, args.mc_width) 
