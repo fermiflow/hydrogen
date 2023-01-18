@@ -1,0 +1,18 @@
+#!/bin/bash -l
+#SBATCH --partition=a800
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH --time=100:00:00
+#SBATCH --job-name=ds
+#SBATCH --output=../jobs/ds.log
+#SBATCH --error=../jobs/ds.log
+#export XLA_PYTHON_CLIENT_PREALLOCATE=false
+echo "The current job ID is $SLURM_JOB_ID"
+echo "Running on $SLURM_JOB_NUM_NODES nodes:"
+echo $SLURM_JOB_NODELIST
+echo "Using $SLURM_NTASKS_PER_NODE tasks per node"
+echo "A total of $SLURM_NTASKS tasks is used"
+
+echo Job started at `date`
+python density_estimation.py --lr 0.001 --batchsize 20
+echo Job finished at `date`

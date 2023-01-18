@@ -11,7 +11,7 @@ import numpy as np
 from ferminet import FermiNet
 from sampler import make_flow
 from train import train
-from mcmc import mcmc 
+from mala import mcmc 
 import checkpoint
 import utils 
 
@@ -66,7 +66,9 @@ def make_loss(logp_fn):
 key = jax.random.PRNGKey(42)
 params, network = make_ferminet(key, args.depth, args.h1size, args.h2size, args.Nf, L)
 logp_fn= make_flow(network, n, dim, L)
+force_fn = jax.vmap(jax.grad(logp_fn, argnums=1), (None, 0), 0)
 logp_fn = jax.vmap(logp_fn, (None, 0), 0)
+
 loss_fn = make_loss(logp_fn)
 value_and_grad = jax.value_and_grad(loss_fn)
 
@@ -91,10 +93,13 @@ if args.restore_path:
         x = jax.random.uniform(subkey, (args.batchsize, n, dim), minval=0, maxval=L)
     else:
         x = data[:args.batchsize] # start from data so we do not suffer from thermaliation issue
-
+     
+    print (logp_fn(params, x))
     for i in range(args.mc_therm):
         key, subkey = jax.random.split(key)
-        x, acc_rate = mcmc(lambda x: logp_fn(params, x), x, subkey, args.mc_steps, args.mc_width) 
+        x, acc_rate = mcmc(lambda x: logp_fn(params, x), 
+                           lambda x: force_fn(params, x), 
+                           x, subkey, args.mc_steps, args.mc_width) 
         x -= L * jnp.floor(x/L)
         print (i, acc_rate, logp_fn(params,x).mean()/n)
     
