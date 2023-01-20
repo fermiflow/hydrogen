@@ -96,6 +96,12 @@ if args.restore_path:
     print (logp_fn(params, x))
     update = 0.5*force_fn(params, x) * args.mc_width**2 + args.mc_width * jax.random.normal(key, x.shape)
     print (update, update.min(), update.max())
+    
+    rdf_data = utils.get_gr(data.reshape(-1, n, dim), L)
+    import h5py 
+    h5_filename = ckpt_filename.replace('.pkl', '.h5')
+    with h5py.File(h5_filename, "w") as f:
+        f.create_dataset("data", data=rdf_data)
 
     for i in range(args.mc_therm):
         key, subkey = jax.random.split(key)
@@ -104,16 +110,9 @@ if args.restore_path:
                            x, subkey, args.mc_steps, args.mc_width) 
         x -= L * jnp.floor(x/L)
         print (i, acc_rate, logp_fn(params,x).mean()/n)
-    
-    import matplotlib.pyplot as plt
-    rdf_data = utils.get_gr(data.reshape(-1, n, dim), L)
-    plt.plot(rdf_data[0], rdf_data[1], linestyle='-', c='blue', label='data')
 
-    rdf_model = utils.get_gr(x.reshape(-1, n, dim), L)
-    plt.plot(rdf_model[0], rdf_model[1], linestyle='-', c='red', label='model')
-
-    plt.legend()
-    plt.show()
-
+        rdf_model = utils.get_gr(x.reshape(-1, n, dim), L)
+        with h5py.File(h5_filename, "a") as f:
+            f.create_dataset("mcstep_%g"%i, data=rdf_model)
 else:
     params = train(key, loss_fn, args.epoch, args.batchsize, params, data, args.lr, path)
