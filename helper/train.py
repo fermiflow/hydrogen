@@ -12,9 +12,15 @@ class TrainingState(NamedTuple):
     params: hk.Params
     opt_state: optax.OptState
 
-def train(key, value_and_grad, num_epochs, batchsize, params, data, lr, path):
+def train(key, loss_fn, num_epochs, batchsize, params, data, lr, path):
+
+    train_set = data[:900]
+    test_set = data[900:]
     
-    assert (len(data)%batchsize==0)
+    assert (len(train_set)%batchsize==0)
+    assert (len(test_set)%batchsize==0)
+
+    value_and_grad = jax.value_and_grad(loss_fn)
 
     @jax.jit
     def step(i, state, x):
@@ -34,20 +40,28 @@ def train(key, value_and_grad, num_epochs, batchsize, params, data, lr, path):
     itercount = itertools.count()
     for epoch in range(num_epochs+1):
         key, subkey = jax.random.split(key)
-        data = jax.random.permutation(subkey, data)
+        train_set = jax.random.permutation(subkey, train_set)
 
-        total_loss = 0.0
+        train_loss = 0.0
         counter = 0 
-        for batch_index in range(0, len(data), batchsize):
-            x = data[batch_index:batch_index+batchsize]
-
+        for batch_index in range(0, len(train_set), batchsize):
+            x = train_set[batch_index:batch_index+batchsize]
             state, loss = step(next(itercount), 
                                state, 
                                x)
-            total_loss += loss
+            train_loss += loss
             counter += 1
-    
-        f.write( ("%6d" + "  %.6f" + "\n") % (epoch, total_loss/counter) )
+        train_loss = train_loss/counter
+
+        test_loss = 0.0
+        counter = 0
+        for batch_index in range(0, len(test_set), batchsize):
+            x = test_set[batch_index:batch_index+batchsize]
+            test_loss += loss_fn(state.params, x)
+            counter += 1
+        test_loss = test_loss/counter
+
+        f.write( ("%6d" + "  %.6f"*2 + "\n") % (epoch, train_loss, test_loss) )
 
         if epoch % 100 == 0:
             ckpt = {"params": state.params,

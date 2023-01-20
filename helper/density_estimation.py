@@ -11,7 +11,7 @@ import numpy as np
 from ferminet import FermiNet
 from sampler import make_flow
 from train import train
-from mala import mcmc 
+from langevin import mcmc 
 import checkpoint
 import utils 
 
@@ -70,7 +70,6 @@ force_fn = jax.vmap(jax.grad(logp_fn, argnums=1), (None, 0), 0)
 logp_fn = jax.vmap(logp_fn, (None, 0), 0)
 
 loss_fn = make_loss(logp_fn)
-value_and_grad = jax.value_and_grad(loss_fn)
 
 path = args.folder + "ds_n_%d_dim_%d_d_%g_h1_%g_h2_%g_lr_%g" % (n, dim, args.depth, args.h1size, args.h2size, args.lr) 
 os.makedirs(path, exist_ok=True)
@@ -95,6 +94,7 @@ if args.restore_path:
         x = data[:args.batchsize] # start from data so we do not suffer from thermaliation issue
      
     print (logp_fn(params, x))
+    print (force_fn(params, x))
     for i in range(args.mc_therm):
         key, subkey = jax.random.split(key)
         x, acc_rate = mcmc(lambda x: logp_fn(params, x), 
@@ -114,4 +114,4 @@ if args.restore_path:
     plt.show()
 
 else:
-    params = train(key, value_and_grad, args.epoch, args.batchsize, params, data, args.lr, path)
+    params = train(key, loss_fn, args.epoch, args.batchsize, params, data, args.lr, path)
