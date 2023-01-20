@@ -32,6 +32,9 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_width=0.02):
         if force_fn is not None:
             f_proposal = force_fn(x_proposal)
             diff = jnp.sum(0.5*(f + f_proposal)*((x - x_proposal) + mc_width**2/4*(f - f_proposal)), axis=(-1,-2))
+            #p_proposal = (x-x_proposal-0.5*f_proposal * mc_width**2)/mc_width
+            #p = (x_proposal - x -0.5*f * mc_width**2)/mc_width
+            #diff = -jnp.sum(p_proposal**2, axis=(-1, -2))/2 + jnp.sum(p**2, axis=(-1, -2))/2
         else:
             f_proposal = jnp.zeros_like(x_proposal)
             diff = jnp.zeros_like(logp_proposal)

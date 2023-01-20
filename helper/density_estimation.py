@@ -11,7 +11,7 @@ import numpy as np
 from ferminet import FermiNet
 from sampler import make_flow
 from train import train
-from langevin import mcmc 
+from mala import mcmc 
 import checkpoint
 import utils 
 
@@ -94,7 +94,9 @@ if args.restore_path:
         x = data[:args.batchsize] # start from data so we do not suffer from thermaliation issue
      
     print (logp_fn(params, x))
-    print (force_fn(params, x))
+    update = 0.5*force_fn(params, x) * args.mc_width**2 + args.mc_width * jax.random.normal(key, x.shape)
+    print (update, update.min(), update.max())
+
     for i in range(args.mc_therm):
         key, subkey = jax.random.split(key)
         x, acc_rate = mcmc(lambda x: logp_fn(params, x), 
@@ -108,7 +110,7 @@ if args.restore_path:
     plt.plot(rdf_data[0], rdf_data[1], linestyle='-', c='blue', label='data')
 
     rdf_model = utils.get_gr(x.reshape(-1, n, dim), L)
-    plt.plot(rdf_model[0], rdf_model[1], linestyle='-', c='red', label='red')
+    plt.plot(rdf_model[0], rdf_model[1], linestyle='-', c='red', label='model')
 
     plt.legend()
     plt.show()
