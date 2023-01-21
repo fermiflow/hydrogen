@@ -6,15 +6,15 @@ import numpy as np
 nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-real-twist'
 
 ###############################
-nlist = [54]
-rslist = [1.25]
-Tlist = [6000]
+nlist = [16]
+rslist = [2.0]
+Tlist = [10000]
 
 dim = 3
 Gmax = 15
 
-twists = 4
-flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 32, 16
+twists = 1
+flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 4, 32, 16
 wfn_depth, wfn_h1size, wfn_h2size = 4, 32, 16
 Nf, K = 1, 1
 nk = 57
@@ -33,7 +33,7 @@ mc_electron_steps = 500
 mc_proton_width = 0.02
 mc_electron_width = 0.04
 
-walkersize, batchsize, acc_steps = 8, 8, 1
+walkersize, batchsize, acc_steps = 512, 8, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -42,9 +42,9 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
 
     #prepare the job file 
     job='''#!/bin/bash -l
-#SBATCH --partition=v100
-#SBATCH --nodes=2
-#SBATCH --gres=gpu:8
+#SBATCH --partition=a800
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s
 #SBATCH --output=%s
@@ -83,7 +83,7 @@ do
     node=${nodes_array[$i]}
     echo "host $i node $node CUDA devices $CUDA_VISIBLE_DEVICES"
     srun --nodes=1 --ntasks=1 -w $node '''
-    job +='python '+ str(bin) + ' '
+    job +='taskset -c 6 python '+ str(bin) + ' '
     for key, val in args.items():
         job += '--'+str(key) + ' '+ str(val) + ' '
     job += '--server_addr=$ip_address --num_hosts=$num_hosts --host_idx=$i &'
