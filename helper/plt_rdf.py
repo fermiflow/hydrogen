@@ -12,10 +12,13 @@ rdf_data = rdf['data']
 
 plt.plot(rdf_data[0], rdf_data[1], linestyle='-', c='blue', label='data')
 
-nsteps = len(rdf.keys()) -1
-for i in range(0, nsteps, 10):
+nsteps = sum(map(lambda k: 'mcstep_' in k, rdf.keys()))
+for i in range(0, nsteps, 500):
     rdf_model = rdf['mcstep_%g'%i]
-    plt.plot(rdf_model[0], rdf_model[1], linestyle='-', c='red', label='model%g'%i)
+    plt.plot(rdf_model[0], rdf_model[1], linestyle='-', 
+             c='red', label='model_%g'%i, 
+             alpha= (i/(nsteps-1) + 0.1)/1.1
+             )
 
 plt.legend()
 plt.show()

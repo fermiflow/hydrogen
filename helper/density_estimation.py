@@ -24,6 +24,7 @@ parser.add_argument("--lr", type=float, default=1e-3, help="initial learning rat
 parser.add_argument("--batchsize", type=int, default=10, help="batch size")
 parser.add_argument("--epoch", type=int, default=10000, help="final epoch")
 
+parser.add_argument("--steps", type=int, default=1, help="FermiNet: network steps")
 parser.add_argument("--depth", type=int, default=4, help="FermiNet: network depth")
 parser.add_argument("--h1size", type=int, default=32, help="FermiNet: single-particle feature size")
 parser.add_argument("--h2size", type=int, default=16, help="FermiNet: two-particle feature size")
@@ -46,11 +47,12 @@ assert (datasize % args.batchsize == 0)
 data -= L * jnp.floor(data/L)
 print("Load dataset: %s" % args.dataset)
 
-def make_ferminet(key, depth, h1size, h2size, Nf, L):
+def make_ferminet(key, steps, depth, h1size, h2size, Nf, L):
     @hk.transform
     def ferminet(x):
-        model = FermiNet(depth, h1size, h2size, Nf, L, 0)
-        x = model(x)
+        for _ in range(steps):
+            model = FermiNet(depth, h1size, h2size, Nf, L, 0)
+            x = model(x)
         return x
 
     x_dummy = jax.random.uniform(key, (n, dim), minval=0., maxval=L)
@@ -64,14 +66,14 @@ def make_loss(logp_fn):
     return loss_fn
 
 key = jax.random.PRNGKey(42)
-params, network = make_ferminet(key, args.depth, args.h1size, args.h2size, args.Nf, L)
+params, network = make_ferminet(key, args.steps, args.depth, args.h1size, args.h2size, args.Nf, L)
 logp_fn= make_flow(network, n, dim, L)
 force_fn = jax.vmap(jax.grad(logp_fn, argnums=1), (None, 0), 0)
 logp_fn = jax.vmap(logp_fn, (None, 0), 0)
 
 loss_fn = make_loss(logp_fn)
 
-path = args.folder + "ds_n_%d_dim_%d_d_%g_h1_%g_h2_%g_lr_%g" % (n, dim, args.depth, args.h1size, args.h2size, args.lr) 
+path = args.folder + "ds_n_%d_dim_%d_s_%g_d_%g_h1_%g_h2_%g_lr_%g" % (n, dim, args.steps, args.depth, args.h1size, args.h2size, args.lr) 
 os.makedirs(path, exist_ok=True)
 print("Create directory: %s" % path)
 
@@ -114,5 +116,6 @@ if args.restore_path:
         rdf_model = utils.get_gr(x.reshape(-1, n, dim), L)
         with h5py.File(h5_filename, "a") as f:
             f.create_dataset("mcstep_%g"%i, data=rdf_model)
+            f.create_dataset("acrate_%g"%i, data=acc_rate)
 else:
     params = train(key, loss_fn, args.epoch, args.batchsize, params, data, args.lr, path)
