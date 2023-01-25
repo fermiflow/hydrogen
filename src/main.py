@@ -161,8 +161,9 @@ params_flow = network_flow.init(key, x_dummy)
 raveled_params_flow, _ = ravel_pytree(params_flow)
 print("#parameters in the flow model: %d" % raveled_params_flow.size)
 
-from sampler import make_flow, make_classical_score
+from sampler import make_flow, make_classical_score, make_classical_force
 logprob_novmap = make_flow(network_flow, n, dim, L)
+classical_force = make_classical_force(logprob_novmap)
 logprob = jax.vmap(jax.vmap(logprob_novmap, (None, 0), 0), (None, 0), 0)
 
 ####################################################################################
@@ -180,9 +181,10 @@ raveled_params_wfn, _ = ravel_pytree(params_wfn)
 print("#parameters in the wavefunction model: %d" % raveled_params_wfn.size)
 
 from logpsi import make_logpsi, make_logpsi_grad_laplacian, \
-                   make_logpsi2, make_quantum_score
+                   make_logpsi2, make_quantum_score, make_quantum_force
 logpsi_novmap = make_logpsi(network_wfn)
 logpsi2 = make_logpsi2(logpsi_novmap)
+quantum_force = make_quantum_force(logpsi_novmap)
 
 ####################################################################################
 
@@ -261,6 +263,7 @@ if epoch_finished == 0:
         keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                    logprob, s, params_flow,
                                    logpsi2, x, params_wfn,
+                                   classical_force, quantum_force,
                                    args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, k)
         print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
@@ -357,6 +360,7 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                                logprob, s, params_flow,
                                                logpsi2, x, params_wfn,
+                                               classical_force, quantum_force,
                                                args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, k)
         ar_s_acc += ar_s/args.acc_steps
         ar_x_acc += ar_x/args.acc_steps

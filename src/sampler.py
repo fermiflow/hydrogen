@@ -39,3 +39,5 @@ OUTPUT:
 an additional leading batch dimension.
 """
 make_classical_score = lambda log_prob: jax.vmap(jax.vmap(jax.grad(log_prob), (None, 0), 0), (None, 0), 0)
+
+make_classical_force = lambda log_prob: jax.vmap(jax.vmap(jax.grad(lambda params, s: log_prob(params, s, False), argnums=1), (None, 0), 0), (None, 0), 0)
