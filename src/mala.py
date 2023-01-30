@@ -22,6 +22,8 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_width=0.02):
     OUTPUT:
         x: resulting batch samples, with the same shape as `x_init`.
     """
+    clipped_force_fn = lambda x: jnp.clip(force_fn(x), a_min=-5/mc_width**2, a_max=5/mc_width**2)
+
     def step(i, state):
         x, logp, f, key, num_accepts = state
         key, key_proposal, key_accept = jax.random.split(key, 3)
@@ -29,8 +31,8 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_width=0.02):
         x_proposal = x + 0.5*f * mc_width**2 + mc_width * jax.random.normal(key_proposal, x.shape)
         logp_proposal = logp_fn(x_proposal)
 
-        if force_fn is not None:
-            f_proposal = force_fn(x_proposal)
+        if clipped_force_fn is not None:
+            f_proposal = clipped_force_fn(x_proposal)
             diff = jnp.sum(0.5*(f + f_proposal)*((x - x_proposal) + mc_width**2/4*(f - f_proposal)), axis=(-1,-2))
             #p_proposal = (x-x_proposal-0.5*f_proposal * mc_width**2)/mc_width
             #p = (x_proposal - x -0.5*f * mc_width**2)/mc_width
@@ -50,8 +52,8 @@ def mcmc(logp_fn, force_fn, x_init, key, mc_steps, mc_width=0.02):
     
     logp_init = logp_fn(x_init)
 
-    if force_fn is not None:
-        f_init = force_fn(x_init)
+    if clipped_force_fn is not None:
+        f_init = clipped_force_fn(x_init)
     else:
         f_init = jnp.zeros_like(x_init)
 
