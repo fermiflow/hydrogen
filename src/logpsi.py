@@ -124,3 +124,13 @@ def make_quantum_score(logpsi):
         return jax.tree_map(lambda jac: jac[0] + 1j * jac[1], grad_params)
 
     return quantum_score_fn
+
+def make_quantum_force(logpsi):
+
+    @partial(jax.vmap, in_axes=(0, None, 0, 0), out_axes=0) # T
+    @partial(jax.vmap, in_axes=(0, None, 0, None), out_axes=0) # W
+    @partial(jax.vmap, in_axes=(0, None, None, None), out_axes=0) # B
+    def quantum_force(x, params, s, k):
+        logpsi2 = lambda x, params, s, k: 2 * logpsi(x, params, s, k)[0]
+        return jax.grad(logpsi2)(x, params, s, k)
+    return quantum_force

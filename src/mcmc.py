@@ -1,8 +1,9 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-
 from functools import partial
+
+from utils import pmean_if_pmap
 
 @partial(jax.jit, static_argnums=0)
 def mcmc(logp_fn, x_init, key, mc_steps, mc_width=0.02):
@@ -39,5 +40,5 @@ def mcmc(logp_fn, x_init, key, mc_steps, mc_width=0.02):
 
     x, logp, key, num_accepts = jax.lax.fori_loop(0, mc_steps, step, (x_init, logp_init, key, 0.))
     batch = np.prod( x.shape[:-2] )
-    accept_rate = jax.lax.pmean(num_accepts / (mc_steps * batch), axis_name="p")
+    accept_rate = pmean_if_pmap(num_accepts / (mc_steps * batch), axis_name="p")
     return x, accept_rate

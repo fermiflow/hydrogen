@@ -3,18 +3,18 @@ import time
 import re
 import numpy as np 
 
-nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-real-twist'
+nickname = 'ff35520-r-fixk0-backflow-tabc-w-feature-learnf-corrects-real-twist-mala'
 
 ###############################
-nlist = [54]
-rslist = [1.25]
-Tlist = [6000]
+nlist = [16]
+rslist = [4.0]
+Tlist = [5000]
 
 dim = 3
 Gmax = 15
 
 twists = 4
-flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 3, 32, 16
+flow_steps, flow_depth, flow_h1size, flow_h2size = 1, 4, 32, 16
 wfn_depth, wfn_h1size, wfn_h2size = 4, 32, 16
 Nf, K = 1, 1
 nk = 57
@@ -27,13 +27,13 @@ decay = 1e-3
 clip_factor = 5.0
 alpha = 0.05
 
-mc_proton_steps = 50
-mc_electron_steps = 500
+mc_proton_steps = 10
+mc_electron_steps = 100
 
 mc_proton_width = 0.02
 mc_electron_width = 0.04
 
-walkersize, batchsize, acc_steps = 8, 8, 1
+walkersize, batchsize, acc_steps = 16, 8, 1
 ###############################
 prog = '../src/main.py'
 resfolder = '/data/wanglei/hydrogen/' + nickname  + '/' 
@@ -43,7 +43,7 @@ def submitJob(bin,args,jobname,logname,run=False,wait=None):
     #prepare the job file 
     job='''#!/bin/bash -l
 #SBATCH --partition=v100
-#SBATCH --nodes=2
+#SBATCH --nodes=1
 #SBATCH --gres=gpu:8
 #SBATCH --time=100:00:00
 #SBATCH --job-name=%s

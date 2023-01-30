@@ -1,7 +1,9 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
+from jax import core
 import functools
-from typing import Sequence, Optional 
+from typing import Sequence, Optional
 import math
 import itertools
 
@@ -72,3 +74,51 @@ def monkhorstpack(size):
     kpts = jnp.reshape(kpts, (-1, 3))
     half = jnp.array([0.5, 0.5, 0.5])
     return (kpts + half) / jnp.array(size) - half
+
+def in_pmap(axis_name: Optional[str]) -> bool:
+  """Returns whether we are in a pmap with the given axis name."""
+
+  if axis_name is None:
+    return False
+
+  try:
+    # The only way to know if we are under `jax.pmap` is to check if the
+    # function call below raises a `NameError` or not.
+    core.axis_frame(axis_name)
+
+    return True
+
+  except NameError:
+    return False
+
+def wrap_if_pmap(p_func):
+  """Wraps `p_func` to be executed only when inside a `jax.pmap` context."""
+
+  @functools.wraps(p_func)
+  def p_func_if_pmap(obj, axis_name):
+
+    return p_func(obj, axis_name) if in_pmap(axis_name) else obj
+
+  return p_func_if_pmap
+
+pmean_if_pmap = wrap_if_pmap(jax.lax.pmean)
+psum_if_pmap = wrap_if_pmap(jax.lax.psum)
+
+def get_gr(x, L, bins=100): 
+    batchsize, n, dim = x.shape[0], x.shape[1], x.shape[2]
+    
+    i,j = np.triu_indices(n, k=1)
+    rij = (np.reshape(x, (-1, n, 1, dim)) - np.reshape(x, (-1, 1, n, dim)))[:,i,j]
+    rij = rij - L*np.rint(rij/L)
+    dist = np.linalg.norm(rij, axis=-1) # (batchsize, n*(n-1)/2)
+   
+    hist, bin_edges = np.histogram(dist.reshape(-1,), range=[0, L/2], bins=bins)
+    dr = bin_edges[1] - bin_edges[0]
+    hist = hist*2/(n * batchsize)
+
+    rmesh = np.arange(hist.shape[0])*dr
+    
+    h_id = 4/3*np.pi*n/(L**3)* ((rmesh+dr)**3 - rmesh**3 )
+    return rmesh, hist/h_id
+
+
