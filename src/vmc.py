@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 from functools import partial
 
-from mala import mcmc
+from mcmc import mcmc
 
 @partial(jax.pmap, axis_name="p",
                    in_axes=(0, 
@@ -11,13 +11,11 @@ from mala import mcmc
                             None, 0, 0, 
                             None, None, 
                             None, None, 
-                            None, None, 
                             None, 0),
-                   static_broadcasted_argnums=(1, 4, 7, 8))
+                   static_broadcasted_argnums=(1, 4))
 def sample_s_and_x(key,
                    logprob, s, params_flow,
                    logpsi2, x, params_wfn,
-                   classical_force, quantum_force,
                    mc_proton_steps, mc_electron_steps,
                    mc_proton_width, mc_electron_width, 
                    L, k):
@@ -33,13 +31,11 @@ def sample_s_and_x(key,
 
     # proton move
     s, proton_acc_rate = mcmc(lambda s: logprob(params_flow, s), 
-                              lambda s: classical_force(params_flow, s), 
                               s, key_proton, mc_proton_steps, mc_proton_width)
     s -= L * jnp.floor(s/L)
     
     # electron move
     x, electron_acc_rate = mcmc(lambda x: logpsi2(x, params_wfn, s, k), 
-                                lambda x: quantum_force(x, params_wfn, s, k), 
                                 x, key_electron, mc_electron_steps, mc_electron_width)
     x -= L * jnp.floor(x/L)
 

@@ -16,6 +16,7 @@ class FermiNet(hk.Module):
                  L:float,
                  K: int = 0,
                  init_stddev:float = 0.01,
+                 remat: bool = False,
                  name: Optional[str] = None
                  ):
         super().__init__(name=name)
@@ -26,6 +27,7 @@ class FermiNet(hk.Module):
         self.L = L
         self.K = K
         self.init_stddev = init_stddev
+        self.remat = remat
   
         self.fc1 = [hk.Linear(h1_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth)]
         self.fc2 = [hk.Linear(h2_size, w_init=hk.initializers.TruncatedNormal(self.init_stddev)) for d in range(depth-1)]
@@ -65,19 +67,23 @@ class FermiNet(hk.Module):
         h1 = None if kpoints is None else jnp.repeat(kpoints[0][None, :], n, axis=0) # twist as a feature
         h2 = self._h2(x)
 
-        for d in range(self.depth-1):
-
+        def block(h1, h2, d):
             f = self._combine(h1, h2)
-
             h1_update = jnp.tanh(self.fc1[d](f))
             h2_update = jnp.tanh(self.fc2[d](h2))
-
             if d > 0:
                 h1 = h1_update + h1
                 h2 = h2_update + h2
             else:
                 h1 = h1_update 
                 h2 = h2_update
+            return h1, h2
+       
+        if self.remat:
+            block = hk.remat(block, static_argnums=2)
+
+        for d in range(self.depth-1):
+            h1, h2 = block(h1, h2, d)
 
         f = self._combine(h1, h2)
         h1 = jnp.tanh(self.fc1[-1](f)) + h1
