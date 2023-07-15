@@ -83,7 +83,11 @@ parser.add_argument("--epoch", type=int, default=100000, help="final epoch")
 args = parser.parse_args()
 
 if args.num_hosts > 1:
-    jax.distributed.initialize(args.server_addr, args.num_hosts, args.host_idx)
+    jax.distributed.initialize(args.server_addr, 
+                               args.num_hosts, 
+                               args.host_idx,
+                               local_device_ids=[int(x) for x in os.environ.get('CUDA_VISIBLE_DEVICES', '0').split(',')]
+                               )
 
 print("Cluster connected with totally %d GPUs" % jax.device_count())
 print("This is process %d with %d local GPUs." % (jax.process_index(), jax.local_device_count()))
@@ -151,7 +155,7 @@ import haiku as hk
 from ferminet import FermiNet
 def forward_fn(x):
     for _ in range(args.flow_steps):
-        model = FermiNet(args.flow_depth, args.flow_h1size, args.flow_h2size, args.Nf, L, 0)
+        model = FermiNet(args.flow_depth, args.flow_h1size, args.flow_h2size, args.Nf, L, 0, remat=True)
         x = model(x)
     return x
 network_flow = hk.transform(forward_fn)
@@ -170,7 +174,7 @@ logprob = jax.vmap(jax.vmap(logprob_novmap, (None, 0), 0), (None, 0), 0)
 
 print("\n========== Initialize wavefunction ==========")
 def forward_fn(x, k):
-    model = FermiNet(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K)
+    model = FermiNet(args.wfn_depth, args.wfn_h1size, args.wfn_h2size, args.Nf, L, args.K, remat=True)
     return model(x, k)
 network_wfn = hk.transform(forward_fn)
 sx_dummy = jax.random.uniform(key, (2*n, dim), minval=0., maxval=L)
@@ -263,7 +267,6 @@ if epoch_finished == 0:
         keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                    logprob, s, params_flow,
                                    logpsi2, x, params_wfn,
-                                   classical_force, quantum_force,
                                    args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, k)
         print ('acc, entropy:', jnp.mean(ar_s), jnp.mean(ar_x), -jax.pmap(logprob)(params_flow, s).mean()/n)
     print("keys shape:", keys.shape, "\t\ttype:", type(keys))
@@ -360,7 +363,6 @@ for i in range(epoch_finished + 1, args.epoch + 1):
         keys, s, x, ar_s, ar_x = sample_s_and_x(keys,
                                                logprob, s, params_flow,
                                                logpsi2, x, params_wfn,
-                                               classical_force, quantum_force,
                                                args.mc_proton_steps, args.mc_electron_steps, args.mc_proton_width, args.mc_electron_width, L, k)
         ar_s_acc += ar_s/args.acc_steps
         ar_x_acc += ar_x/args.acc_steps
