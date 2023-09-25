@@ -1,4 +1,4 @@
-[![Paper](https://img.shields.io/badge/paper-arXiv:2209.06095-B31B1B.svg)](https://arxiv.org/abs/2209.06095)
+[![Paper](https://img.shields.io/badge/paper-Phys.%20Rev.%20Lett.%20131,%20126501-B31B1B.svg)](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.131.126501)
 
 <div align="center">
 <img align="middle" src="_assets/Depositphotos_6284414_XL.jpg" width="500" alt="logo"/>
@@ -33,12 +33,18 @@ python ../src/main.py --T 6000 --rs 1.25 --n 14 --Gmax 15 --flow_steps 1 --flow_
 ## To cite
 
 ```
-@article{xie2022hydrogen,
-      title={A deep variational free energy approach to dense hydrogen}, 
-      author={Hao Xie and Zi-Hang Li and Han Wang and Linfeng Zhang and Lei Wang},
-      year={2022},
-      eprint={2209.06095},
-      archivePrefix={arXiv},
-      primaryClass={cond-mat.str-el}
+@article{PhysRevLett.131.126501,
+  title = {Deep Variational Free Energy Approach to Dense Hydrogen},
+  author = {Xie, Hao and Li, Zi-Hang and Wang, Han and Zhang, Linfeng and Wang, Lei},
+  journal = {Phys. Rev. Lett.},
+  volume = {131},
+  issue = {12},
+  pages = {126501},
+  numpages = {8},
+  year = {2023},
+  month = {Sep},
+  publisher = {American Physical Society},
+  doi = {10.1103/PhysRevLett.131.126501},
+  url = {https://link.aps.org/doi/10.1103/PhysRevLett.131.126501}
 }
 ```
